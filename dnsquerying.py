@@ -3,9 +3,9 @@ from ldap3 import *
 from dns_structures import *
 
 
-dc_ip = "10.129.204.177"
-username = "grace"
-password = "Inlanefreight01!"
+dc_ip = "10.129.204.226"
+username = "htb-student"
+password = "HTBRocks!"
 
 s = Server(dc_ip, get_info=ALL)
 

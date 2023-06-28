@@ -3,7 +3,7 @@ import socket
 from struct import unpack, pack
 import datetime
 
-#  stolen from adidnsdump, specifically: https://github.com/dirkjanm/adidnsdump/blob/65169b2b5c9dc2b51afe03851d42156085c4cd68/adidnsdump/dnsdump.py#L327
+# mostly stolen from adidnsdump, specifically: https://github.com/dirkjanm/adidnsdump/blob/65169b2b5c9dc2b51afe03851d42156085c4cd68/adidnsdump/dnsdump.py#L327
 
 # https://en.wikipedia.org/wiki/List_of_DNS_record_types
 RECORD_TYPE_MAPPING = {
