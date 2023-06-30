@@ -4,6 +4,8 @@ import sys
 import os
 import argparse
 from dns_structures import *
+from impacket.ldap import ldaptypes
+import dns.resolver
 
 parser = argparse.ArgumentParser(prog="AD Hunter", description="""Active Directory Enumeration""")
 parser.add_argument("domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
@@ -39,6 +41,7 @@ print("")
 
 
 # TODO Check to make sure this is not being run on enviroments that are not linux
+# TODO most LDAP searchs will fetch deactivated accounts
 
 if(args.username != None and args.password == None):
 	print("If a username is supplied a password must also be supplied")
@@ -207,21 +210,63 @@ print("[+] Found: {} AD Objects with Unconstrained Delegations".format(count))
 
 
 ##### All objects with trusted for auth delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=16777216)
-c.search(search_base=default_search_base, search_filter='(userAccountControl:1.2.840.113556.1.4.803:=16777216)', search_scope=ldap3.SUBTREE, attributes="*")
+c.search(search_base=default_search_base, search_filter='(msDS-AllowedToDelegateTo=*)', search_scope=ldap3.SUBTREE, attributes="*")
 
 with open(f"{save_dir}/full/objects_constrained_delegation_full.txt", "w") as f:
 	f.write(str(c.response))
 	
+countC = 0
+countCPT = 0
+with open(f"{save_dir}/delegation_constrained_objects.txt", "w") as f1:
+	with open(f"{save_dir}/delegation_constrained_w_protocol_transition_objects.txt", "w") as f2:
+		f1.write("SamAccountName: {objects that account can delegate for}\n")
+		f1.write("====================================================================\n")
+
+		f2.write("SamAccountName: {objects that account can delegate for}\n")
+		f2.write("====================================================================\n")
+		for i in range(len(c.response)):
+			if(c.response[i]["type"] == "searchResEntry"):
+				if(int(c.response[i]["attributes"]["useraccountcontrol"]) & 16777216):
+					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
+					countCPT += 1
+				else:
+					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
+					countC += 1
+
+print("[+] Found: {} AD Objects with Constrained Delegations".format(countC))
+print("[+] Found: {} AD Objects with Constrained Delegations with Protocol Transition".format(countCPT))
+
+
+c.search(search_base=default_search_base, search_filter='(msDS-AllowedToActOnBehalfOfOtherIdentity=*)', search_scope=ldap3.SUBTREE, attributes="*")
+
+with open(f"{save_dir}/full/objects_rbcd_delegation_full.txt", "w") as f:
+	f.write(str(c.response))
+	
 count = 0
-with open(f"{save_dir}/delegation_constrained_objects.txt", "w") as f:
-	f.write("SamAccountName: {objects that account can delegate for}\n")
-	f.write("====================================================================\n")
+with open(f"{save_dir}/delegation_rbcd_objects.txt", "w") as f:
 	for i in range(len(c.response)):
 		if(c.response[i]["type"] == "searchResEntry"):
-			f.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
-			count += 1
+			name = str(c.response[i]["attributes"]["samaccountname"])
 
-print("[+] Found: {} AD Objects with Constrained Delegations".format(count))
+			sF = '(|'
+			sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=bytes(c.response[i]["attribute"]["msDS-AllowedToActOnBehalfOfOtherIdentity"]))
+			for ace in sd['Dacl'].aces:
+				sF = sF + "(objectSid="+ace['Ace']['Sid'].formatCanonical()+")"
+			sF = sF + ')'
+
+			c.search(search_base=default_search_base, search_filter=sF, search_scope=ldap3.BASE, attributes="*")
+
+			for dele in c.response:
+				f.write(f"{name} ::: delegates ::: {dele['attributes']['sAMAccountName']}\n")
+				count += 1
+
+
+c.search(search_base=default_search_base, search_filter='(ms-DS-MachineAccountQuota=*)', search_scope=ldap3.SUBTREE, attributes="ms-DS-MachineAccountQuota")
+
+
+print("[+] Found: {} AD Objects with Resource Based Constrained Delegations".format(count))
+print(f"[*] Machine Account Quota: {c.response[0]['attributes']['ms-DS-MachineAccountQuota']}")
+
 
 
 print("")
@@ -267,6 +312,7 @@ for entry in c.response:
 
 # we need to save some records in memory for use in converting domain controllers to ips
 A_records = [] # probably should add support for IPv6 #TODO
+NS_records = [] #
 
 with open(f"{save_dir}/ad_dns_dump.txt", "w") as f:
 	for zone in zones:
@@ -300,8 +346,13 @@ with open(f"{save_dir}/ad_dns_dump.txt", "w") as f:
 					A_records.append(record_mapped)
 					f.write(str(record_mapped))
 					f.write("\n")
-				elif queryType in ['NS', 'PTR', 'CNAME']:
+				elif queryType in ['PTR', 'CNAME']:
 					data = DNS_RPC_RECORD_NODE_NAME(dr["Data"])
+					f.write(str({'name':recordname, 'type': queryType, 'value': data[list(data.fields)[0]].toFqdn()}))
+					f.write("\n")
+				elif queryType == 'NS':
+					data = DNS_RPC_RECORD_NODE_NAME(dr["Data"])
+					NS_records.append({'name':recordname, 'type': queryType, 'value': data[list(data.fields)[0]].toFqdn()})
 					f.write(str({'name':recordname, 'type': queryType, 'value': data[list(data.fields)[0]].toFqdn()}))
 					f.write("\n")
 				elif queryType == 'TXT':
@@ -324,10 +375,60 @@ with open(f"{save_dir}/ad_dns_dump.txt", "w") as f:
 					f.write("\n")
 					f.write("================================\n")
 		
-		print(f"Found zone: {zone}: with {num_records} records")			
+		print(f"[+] Found zone: {zone}: with {num_records} records")			
 
 print("")
 print(f"AD DNS Dumping saved to {save_dir}/ad_dns_dump.txt")
+print("")
+
+print("")
+print("NameServer Enumeration")
+print("=========================")
+print("")
+
+
+# TODO Dns zone transfer, brute, exfil
+
+dns_resolver = dns.resolver.Resolver(configure=False)
+dns_resolver.nameservers = []
+
+# add all name servers that we have ips for to our dns resolver
+ns_processed = []
+for ns in NS_records:
+	if(args.domain in ns["value"]): # does the dns server sit within the domain we are scanning
+		
+		ns_hash = f"{ns['value']}"
+		
+
+		if(ns_hash in ns_processed):
+			continue
+
+		ns_processed.append(ns_hash)
+
+		use_name = input(f"[+] Found Nameserver {ns_hash}, use this (Y/n): ")
+
+		if(not "Y" in use_name and not "y" in use_name):
+			continue
+
+		# DNS records in AD are stored at the subdomain component so we need to fetch that
+		query = ns["value"].split(args.domain)[0] #is this a subdomain  [dc01].inlanefrieght.htb.
+		if(query == "." or query == ""):
+			query = '@'
+		else:
+			query = query[:-1]
+			
+		
+		matching_ips = set()
+		for a in A_records:
+			if(a["name"] == query):
+				matching_ips.add(a["value"])
+
+		for ip in matching_ips:
+			use = input(f"[?] Found IP: {ip} for {ns['value']}. Use this IP (Y/n): ")
+			if("Y" in use or "y" in use):
+				dns_resolver.nameservers.append(ip)
+
+print(f"[+] Name Servers have been set as {dns_resolver.nameservers}")
 
 ### Domain controllers identifications
 print("")
@@ -337,6 +438,7 @@ print("")
 # get all NTDSDSA objects, only domain controllers run this service
 c.search(search_base=s.info.other.get('ConfigurationNamingContext')[0], search_filter='(objectClass=nTDSDSA)', search_scope=ldap3.SUBTREE, attributes="*")
 
+dc_ip = []
 
 results = c.response 
 for i in range(len(results)):
@@ -378,6 +480,8 @@ for i in range(len(results)):
 			print("Unknown Input, Skipping Vuln testing for this DC") 
 			continue
 		else:
+			dc_ip.append(vals[selected_ip])
+
 			print(f"[*] Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {domain_controller_name} ")
 			os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {vals[selected_ip]}")
 			print("")
@@ -416,3 +520,60 @@ print("")
 print("System Scanning")
 print("=========================")
 print("")
+
+print("[+] Finding IPs to scan")
+
+system_ips = set()
+seen_ips = set()
+
+# LinWinPwn uses the adinaddump service to find ips, we will use 2 methods
+c.search(search_base=default_search_base, search_filter='(dnshostname=*)', search_scope=ldap3.SUBTREE, attributes="*")
+
+for a in A_records:
+	if(a['value'] in seen_ips):
+		continue
+	seen_ips.add(a['value'])
+	ip_dns = input(f"[?] AD-DNS found ip: {a['value']}, use this IP (y/n): ")
+	if("Y" in ip_dns or "y" in ip_dns):
+		system_ips.add(a['value'])
+
+# resolver should already be setup
+print("Checking for services")
+
+for section in c.response:
+	if(section["type"] == "searchResEntry"):
+		print(f"[+] Found service: {section['attributes']['dnshostname']}")
+
+		# try and resolve these to ips with our resolver
+		try:
+			ans = dns_resolver.query(section['attributes']['dnshostname'], 'A')
+		except:
+			print("[*] Could not resolve domain.")
+			continue
+
+		for response in ans:
+			if(response.to_text() in seen_ips):
+				continue
+			seen_ips.add(response.to_text())
+			ip_dns = input(f"[?] DNS Resolved an IP {response.to_text()}, use this IP (y/n): ")
+			
+			if("Y" in ip_dns or "y" in ip_dns):
+				system_ips.add(response.to_text())
+
+print("")
+print(f"Running checks for {system_ips}")
+print("")
+
+for ip in system_ips:
+	print(f"[*] Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {ip} ")
+	os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}")
+	print("")
+
+	#Auth reliant
+	print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} WebDav Scan for {ip}")
+	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M webdav")
+	print("")
+
+	print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Spooler Scan for {ip}")
+	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M spooler")
+	print("")
