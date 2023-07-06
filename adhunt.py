@@ -91,6 +91,7 @@ if(args.username == None):
 
 if(not args.domain):
 	print("A domain must be supplied.")
+	sys.exit(1)
 
 
 s = Server(args.domain_controller_ip, get_info = ALL)
