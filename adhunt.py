@@ -1,3 +1,5 @@
+#!/usr/bin/python3 -i
+
 import ldap3
 from ldap3 import *
 import sys
@@ -7,12 +9,13 @@ from dns_structures import *
 from impacket.ldap import ldaptypes
 import dns.resolver
 
-parser = argparse.ArgumentParser(prog="AD Hunter", description="""Active Directory Enumeration""")
-parser.add_argument("domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
+parser = argparse.ArgumentParser(prog="python3 adhunt.py", description="""Active Directory Enumeration tool""")
+parser.add_argument("-i", "--install", action='store_true', help="install nessecary components")
+parser.add_argument("--dc-ip", dest="domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
 parser.add_argument("-u", "--username", help="The username of the user for enumation purposes")
 parser.add_argument("-p", "--password", help="The password of the supplied user")
 parser.add_argument("-d", "--domain", help="The domain of the given user")
-parser.add_argument("--ssl", help="should we try to connect with ssl")
+# parser.add_argument("--ssl", help="should we try to connect with ssl")
 
 args = parser.parse_args()
 
@@ -27,7 +30,14 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+    INSTALL = '\x1B[38;5;166m'
 
+if(os.name != "posix"):
+	print("AD Hunt only works in a linux enviroment.")
+
+if(sys.version_info[0] != 3):
+	print("{0}Warning: This script has only been tested for python3{1}".format(bcolors.WARNING, bcolors.ENDC))
+	sys.exit(1)
 
 ### Header
 print(rf'''{bcolors.OKCYAN} ______  _____       __  __  __  __  __   __  ______  
@@ -37,15 +47,32 @@ print(rf'''{bcolors.OKCYAN} ______  _____       __  __  __  __  __   __  ______
   \/_/\/_/\/____/     \/_/\/_/\/_____/\/_/ \/_/  \/_/ {bcolors.ENDC}''')
                                                       
 print("") 
-print("")                      
+print("")              
+
+if(args.install):
+	print("Installing... (are you root?)")
+	print(f"{bcolors.INSTALL}[+] Installing pip3{bcolors.ENDC}")
+	os.system("apt install python3-pip")
+	print(f"{bcolors.INSTALL}[+] Installing Impacket{bcolors.ENDC}")
+	os.system("pip3 install impacket")
+	print(f"{bcolors.INSTALL}[+] Installing CME{bcolors.ENDC}")
+	os.system("apt install crackmapexec")
+	print(f"{bcolors.INSTALL}[+] Installing Certipy{bcolors.ENDC}")
+	os.system("apt install certipy-ad")
+	print(f"{bcolors.INSTALL}[+] Installing NMAP{bcolors.ENDC}")
+	os.system("apt install nmap")
+	sys.exit(0)
 
 
-# TODO Check to make sure this is not being run on enviroments that are not linux
 # TODO most LDAP searchs will fetch deactivated accounts
+
+if(not args.domain_controller_ip):
+	print("Must specify the ip of a domain controller with -dc-ip")
 
 if(args.username != None and args.password == None):
 	print("If a username is supplied a password must also be supplied")
 
+# TODO figure out if this is nessecary
 if(args.username == None):
 	print("Attempting Anoynomous Bind to ldap://" + args.domain_controller_ip)
 	print("Checks are not performed")
@@ -57,9 +84,10 @@ if(args.username == None):
 		sys.exit(1)
 	print(s.info)
 	
-	# TODO figure out if this is nessecary
-	sys.exit(1)
+	sys.exit(0)
 
+if(not args.domain):
+	print("A domain must be supplied.")
 
 
 s = Server(args.domain_controller_ip, get_info = ALL)
