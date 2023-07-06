@@ -31,6 +31,7 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     INSTALL = '\x1B[38;5;166m'
+    CMD = '\x1B[38;5;151m'
 
 if(os.name != "posix"):
 	print("AD Hunt only works in a linux enviroment.")
@@ -52,15 +53,15 @@ print("")
 
 if(args.install):
 	print("Installing... (are you root?)")
-	print(f"{bcolors.INSTALL}[+] Installing pip3{bcolors.ENDC}")
+	print(f"{bcolors.INSTALL}{bcolors.INSTALL}[+]{bcolors.ENDC} Installing pip3{bcolors.ENDC}")
 	os.system("apt install python3-pip")
-	print(f"{bcolors.INSTALL}[+] Installing Impacket{bcolors.ENDC}")
+	print(f"{bcolors.INSTALL}{bcolors.INSTALL}[+]{bcolors.ENDC} Installing Impacket{bcolors.ENDC}")
 	os.system("pip3 install impacket")
-	print(f"{bcolors.INSTALL}[+] Installing CME{bcolors.ENDC}")
+	print(f"{bcolors.INSTALL}{bcolors.INSTALL}[+]{bcolors.ENDC} Installing CME{bcolors.ENDC}")
 	os.system("apt install crackmapexec")
-	print(f"{bcolors.INSTALL}[+] Installing Certipy{bcolors.ENDC}")
+	print(f"{bcolors.INSTALL}{bcolors.INSTALL}[+]{bcolors.ENDC} Installing Certipy{bcolors.ENDC}")
 	os.system("apt install certipy-ad")
-	print(f"{bcolors.INSTALL}[+] Installing NMAP{bcolors.ENDC}")
+	print(f"{bcolors.INSTALL}{bcolors.INSTALL}[+]{bcolors.ENDC} Installing NMAP{bcolors.ENDC}")
 	os.system("apt install nmap")
 	sys.exit(0)
 
@@ -115,7 +116,7 @@ os.makedirs(f"{save_dir}/full", exist_ok=True)
 
 ### Header continued
 print("")
-print("Target Information")
+print(f"{bcolors.BOLD}Target Information{bcolors.ENDC}")
 print("=========================")
 print(f"Domain Controller: {args.domain_controller_ip}, {args.domain}")
 print(f"Default Context: {default_search_base}")
@@ -126,7 +127,7 @@ print("")
 
 ### Password Policies
 print("")
-print("Password Policies")
+print(f"{bcolors.BOLD}Password Policies{bcolors.ENDC}")
 print("=========================")
 print("")
 
@@ -137,12 +138,34 @@ c.search(search_base=default_search_base, search_filter='(objectClass=domainDNS)
 with open(f"{save_dir}/full/pass_pols.txt", "w") as f:
 	f.write(str(c.response))
 
-#TODO Color code good and bad policies
-print("[+] Password Minimum Length: {}".format(c.response[0]["attributes"]["minPwdLength"]))
-print("[+] Password History Length: {}".format(c.response[0]["attributes"]["pwdHistoryLength"]))
-print("[+] Password Complexity: {}".format(c.response[0]["attributes"]["pwdProperties"] & 1 > 0))
-print("[+] Lockout Threshold: {}".format(c.response[0]["attributes"]["lockoutThreshold"]))
-print("[+] Lockout Duration: {}".format(c.response[0]["attributes"]["lockoutDuration"]))
+
+minPwd = c.response[0]['attributes']['minPwdLength']
+hisLen = c.response[0]['attributes']['pwdHistoryLength']
+compBit = c.response[0]['attributes']['pwdProperties'] & 1 > 0
+lthres = c.response[0]['attributes']['lockoutThreshold']
+ldur = c.response[0]['attributes']['lockoutDuration']
+
+if(minPwd < 15):
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password Minimum Length: {bcolors.FAIL}{minPwd}{bcolors.ENDC}")
+else:
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password Minimum Length: {bcolors.OKGREEN}{minPwd}{bcolors.ENDC}")
+
+if(hisLen <= 2):
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password History Length: {bcolors.FAIL}{hisLen}{bcolors.ENDC}")
+else:
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password History Length: {bcolors.OKGREEN}{hisLen}{bcolors.ENDC}")
+
+if(compBit == False):
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password Complexity Bit Set: {bcolors.FAIL}False{bcolors.ENDC}")
+else:
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password Complexity Bit Set: {bcolors.OKGREEN}True{bcolors.ENDC}")
+
+if(lthres == 0):
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Lockout Threshold: {bcolors.FAIL}False{bcolors.ENDC}")
+else:
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Lockout Threshold: {bcolors.FAIL}{lthres}{bcolors.ENDC}")
+
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Lockout Duration: {ldur}")
 
 
 
@@ -152,13 +175,16 @@ print("[+] Lockout Duration: {}".format(c.response[0]["attributes"]["lockoutDura
 ##### LAPS in use? Every user should be able to see the AdmPwdExpiration attribute			Check for 'CN=ms-mcs-admpwd,CN=Schema,CN=Configuration,DC=DOMAIN' DOMAIN schema should be in s.info
 laps_use = c.search(search_base=s.info.other.get('SchemaNamingContext')[0], search_filter='(cn=ms-mcs-AdmPwdExpirationTime)', search_scope=ldap3.SUBTREE, attributes="*")
 
-print("[+] LAPS installed: {}".format(laps_use))
+if(laps_use):
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} LAPS installed: {bcolors.OKGREEN}{laps_use}{bcolors.ENDC}")
+else:
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} LAPS installed: {bcolors.FAIL}{laps_use}{bcolors.ENDC}")
 print("")
 print("Full password information dump saved to pass_pols.txt")
 print("")
 
 print("")
-print("AD DNS Enumeration")
+print(f"{bcolors.BOLD}AD DNS Enumeration{bcolors.ENDC}")
 print("=========================")
 print("")
 
@@ -258,14 +284,14 @@ with open(f"{save_dir}/ad_dns_dump.txt", "w") as f:
 					f.write("\n")
 					f.write("================================\n")
 		
-		print(f"[+] Found zone: {zone}: with {num_records} records")			
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found zone: {zone}: with {num_records} records")			
 
 print("")
 print(f"AD DNS Dumping saved to {save_dir}/ad_dns_dump.txt")
 print("")
 
 print("")
-print("NameServer Enumeration")
+print(f"{bcolors.BOLD}NameServer Enumeration{bcolors.ENDC}")
 print("=========================")
 print("")
 
@@ -285,7 +311,7 @@ for ns in NS_records:
 
 		ns_processed.append(ns['value'])
 
-		use_name = input(f"[+] Found Nameserver {ns['value']}, use this (Y/n): ")
+		use_name = input(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found Nameserver {ns['value']}, use this (Y/n): ")
 
 		if(not "Y" in use_name and not "y" in use_name):
 			continue
@@ -308,11 +334,11 @@ for ns in NS_records:
 			if("Y" in use or "y" in use):
 				dns_resolver.nameservers.append(ip)
 
-print(f"[+] Name Servers have been set as {dns_resolver.nameservers}")
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Name Servers have been set as {dns_resolver.nameservers}")
 
 ### Domain controllers identifications
 print("")
-print("Domain Controller Scanning")
+print(f"{bcolors.BOLD}Domain Controller Scanning{bcolors.ENDC}")
 print("=========================")
 print("")
 # get all NTDSDSA objects, only domain controllers run this service
@@ -332,7 +358,7 @@ for i in range(len(results)):
 		#should only return one response if we did it right
 		domain_controller_name = c.response[0]['attributes']['name']
 
-		print(f"[+] Found {domain_controller_name}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found {domain_controller_name}")
 
 		# prevents duplicates in a messy way
 		vals = list(set([x["value"] for x in A_records if x["name"].lower() == domain_controller_name.lower()]))
@@ -362,46 +388,46 @@ for i in range(len(results)):
 		else:
 			dc_ip.append(vals[selected_ip])
 
-			print(f"[*] Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {domain_controller_name} ")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {domain_controller_name} ")
 			os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {vals[selected_ip]}")
 			print("")
 
-			print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
 			os.system(f"crackmapexec ldap {vals[selected_ip]} -u '{args.username}' -p '{args.password}' -M ldap-checker")
 			print("")
 
-			print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Petitpotam Scan for {domain_controller_name}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Petitpotam Scan for {domain_controller_name}")
 			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M petitpotam")
 			print("")
 			
-			print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {domain_controller_name}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {domain_controller_name}")
 			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M ms17-010")
 			print("")
 			
-			print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} DFSCoerce Scan for {domain_controller_name}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} DFSCoerce Scan for {domain_controller_name}")
 			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M dfscoerce")
 			print("")
 			
 			
 			""" TODO Zerologon is broken and does not close crackmapexec after completing """
-			""" print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Zerologon Scan for {domain_controller_name}")
+			""" print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Zerologon Scan for {domain_controller_name}")
 			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M zerologon")
 			os.system(f"pkill crackmapexec")
 			print("") """
 			
 
 			#TODO this is dependant on authentication type
-			print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} NoPac Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} NoPac Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
 			os.system(f"crackmapexec smb {vals[selected_ip]} -u '{args.username}' -p '{args.password}' -M nopac")
 			print("")
 
 
 print("")
-print("System Scanning")
+print(f"{bcolors.BOLD}System Scanning{bcolors.ENDC}")
 print("=========================")
 print("")
 
-print("[+] Finding IPs to scan")
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Finding IPs to scan")
 
 system_ips = set()
 seen_ips = set()
@@ -422,13 +448,13 @@ print("Checking for services")
 
 for section in c.response:
 	if(section["type"] == "searchResEntry"):
-		print(f"[+] Found service: {section['attributes']['dnshostname']}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found service: {section['attributes']['dnshostname']}")
 
 		# try and resolve these to ips with our resolver
 		try:
 			ans = dns_resolver.query(section['attributes']['dnshostname'], 'A')
 		except:
-			print("[*] Could not resolve domain.")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Could not resolve domain.")
 			continue
 
 		for response in ans:
@@ -440,38 +466,39 @@ for section in c.response:
 			if("Y" in ip_dns or "y" in ip_dns):
 				system_ips.add(response.to_text())
 
-print("")
-print(f"Running checks for {system_ips}")
-print("")
+if(len(system_ips) > 0):
+	print("")
+	print(f"Running checks for {system_ips}")
+	print("")
 
 for ip in system_ips:
-	print(f"[*] Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {ip} ")
+	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {ip} ")
 	os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}")
 	print("")
 
 	#Auth reliant
-	print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} WebDav Scan for {ip}")
+	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} WebDav Scan for {ip}")
 	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M webdav")
 	print("")
 
-	print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Spooler Scan for {ip}")
+	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Spooler Scan for {ip}")
 	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M spooler")
 	print("")
 
 
 print("")
-print("Certificate Services")
+print(f"{bcolors.BOLD}Certificate Services{bcolors.ENDC}")
 print("=========================")
 print("")
 
-print("[+] Scanning with certipy-ad")
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Scanning with certipy-ad")
 #TODO Different auth types
 os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
 
 
 ### User Enumerations
 print("")
-print("User Enumerations")
+print(f"{bcolors.BOLD}User Enumerations{bcolors.ENDC}")
 print("=========================")
 print("")
 
@@ -488,7 +515,7 @@ with open(f"{save_dir}/users_dcsrp.txt", "w") as f:
 			f.write(str(c.response[i]["attributes"]["name"]) + ": " + str(c.response[i]["attributes"]["description"]) + "\n")
 			count += 1
 
-print("[+] Found {} users with descriptions".format(count))
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found {count} users with descriptions")
 
 
 ##### Users without a password set -> output to file (print number found)				(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))
@@ -505,7 +532,7 @@ with open(f"{save_dir}/users_no_req_pass.txt", "w") as f:
 with open(f"{save_dir}/full/users_no_req_pass_full.txt", "w") as f:
 	f.write(str(c.response))
 	
-print("[+] Found {} users without required passwords".format(count))
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found {count} users without required passwords")
 
 print("")
 
@@ -513,7 +540,7 @@ print("")
 ####### Retrieve tickets -> output to file
 # Make sure that there is a route to the nameserver (ie, cme needed dc01.inlanefreight.htb in /etc/hosts to work)
 # TODO change for dependance on auth method
-print(f"[+] Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting (output hidden)")  
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting (output hidden)")  
 os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --asreproast {save_dir}/users_asreproast.txt > /dev/null")
 print("")
 
@@ -524,7 +551,7 @@ print("")
 
 # 
 # TODO change for dependance on auth method
-print(f"[+] Performing {bcolors.PURPLE}CME{bcolors.ENDC} kerberoasting (output hidden)")  
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} kerberoasting (output hidden)")  
 os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --kerberoasting {save_dir}/users_kerberoasting.txt > /dev/null")
 print("")
 ######## Option to crack hashes in background?
@@ -533,7 +560,7 @@ print("")
 print(f"Files saved in {save_dir} as users_*.txt")
 
 print("")
-print("Delegation Enumeration")
+print(f"{bcolors.BOLD}Delegation Enumeration{bcolors.ENDC}")
 print("=========================")
 print("")
 
@@ -551,7 +578,7 @@ with open(f"{save_dir}/delegation_unconstrained_objects.txt", "w") as f:
 			f.write(str(c.response[i]["attributes"]["samaccountname"]) + "\n")
 			count += 1
 
-print("[+] Found: {} AD Objects with Unconstrained Delegations".format(count))
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {count} AD Objects with Unconstrained Delegations")
 
 
 ##### All objects with trusted for auth delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=16777216)
@@ -578,8 +605,8 @@ with open(f"{save_dir}/delegation_constrained_objects.txt", "w") as f1:
 					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
 					countC += 1
 
-print("[+] Found: {} AD Objects with Constrained Delegations".format(countC))
-print("[+] Found: {} AD Objects with Constrained Delegations with Protocol Transition".format(countCPT))
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {countC} AD Objects with Constrained Delegations")
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {countCPT} AD Objects with Constrained Delegations with Protocol Transition")
 
 
 c.search(search_base=default_search_base, search_filter='(msDS-AllowedToActOnBehalfOfOtherIdentity=*)', search_scope=ldap3.SUBTREE, attributes="*")
@@ -609,9 +636,12 @@ with open(f"{save_dir}/delegation_rbcd_objects.txt", "w") as f:
 c.search(search_base=default_search_base, search_filter='(ms-DS-MachineAccountQuota=*)', search_scope=ldap3.SUBTREE, attributes="ms-DS-MachineAccountQuota")
 
 
-print("[+] Found: {} AD Objects with Resource Based Constrained Delegations".format(count))
-print(f"[*] Machine Account Quota: {c.response[0]['attributes']['ms-DS-MachineAccountQuota']}")
-
+print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {count} AD Objects with Resource Based Constrained Delegations")
+macctq = c.response[0]['attributes']['ms-DS-MachineAccountQuota']
+if(macctq <= 0):
+	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Machine Account Quota: {bcolors.OKGREEN}{macctq}{bcolors.ENDC}")
+else:
+	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Machine Account Quota: {bcolors.FAIL}{macctq}{bcolors.ENDC}")
 
 
 print("")
