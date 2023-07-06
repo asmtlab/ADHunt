@@ -125,155 +125,6 @@ print("")
 print("Full password information dump saved to pass_pols.txt")
 print("")
 
-### User Enumerations
-print("")
-print("User Enumerations")
-print("=========================")
-print("")
-
-##### Users with descriptions -> output to file (print number found)					(&(objectClass=user)(description=*))
-c.search(search_base=default_search_base, search_filter='(&(objectClass=user)(description=*))', search_scope=ldap3.SUBTREE, attributes="*")
-
-count = 0
-with open(f"{save_dir}/full/users_dcsrp_full.txt", "w") as f:
-	f.write(str(c.response))
-	
-with open(f"{save_dir}/users_dcsrp.txt", "w") as f:
-	for i in range(len(c.response)):
-		if(c.response[i]["type"] == "searchResEntry"):
-			f.write(str(c.response[i]["attributes"]["name"]) + ": " + str(c.response[i]["attributes"]["description"]) + "\n")
-			count += 1
-
-print("[+] Found {} users with descriptions".format(count))
-
-
-##### Users without a password set -> output to file (print number found)				(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))
-
-c.search(search_base=default_search_base, search_filter='(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))', search_scope=ldap3.SUBTREE, attributes="*")
-
-count = 0
-with open(f"{save_dir}/users_no_req_pass.txt", "w") as f:
-	for i in range(len(c.response)):
-		if(c.response[i]["type"] == "searchResEntry"):
-			f.write(str(c.response[i]["attributes"]["name"]) + "\n")
-			count += 1
-	
-with open(f"{save_dir}/full/users_no_req_pass_full.txt", "w") as f:
-	f.write(str(c.response))
-	
-print("[+] Found {} users without required passwords".format(count))
-
-
-##### Users where ASP-REP roasting is possible
-####### Retrieve tickets -> output to file
-# TODO FIX
-# TODO change for dependance on auth method
-print(f"[+] Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting")  
-os.system(f"crackmapexec ldap {args.domain_controller_ip} --kdcHost {args.domain_controller_ip} -u {args.username} -p {args.password} --asreproast {save_dir}/users_asreproast.txt")
-print("")
-
-######## Option to crack hashes in background
-
-##### Users where Kerberoasting is possible
-####### Retrieve tickets -> output to file
-
-# TODO FIX
-# TODO change for dependance on auth method
-print(f"[+] Performing {bcolors.PURPLE}CME{bcolors.ENDC} kerberoasting")  
-os.system(f"crackmapexec ldap {args.domain_controller_ip} --kdcHost {args.domain_controller_ip} -u {args.username} -p {args.password} --kerberoasting {save_dir}/users_kerberoasting.txt")
-print("")
-######## Option to crack hashes in background?
-
-print("")
-print(f"Files saved in {save_dir} as users_*.txt")
-
-print("")
-print("Delegation Enumeration")
-print("=========================")
-print("")
-
-
-##### All objects with trusted for delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=524288)
-c.search(search_base=default_search_base, search_filter='(userAccountControl:1.2.840.113556.1.4.803:=524288)', search_scope=ldap3.SUBTREE, attributes="*")
-
-with open(f"{save_dir}/full/objects_unconstrained_delegation_full.txt", "w") as f:
-	f.write(str(c.response))
-	
-count = 0
-with open(f"{save_dir}/delegation_unconstrained_objects.txt", "w") as f:
-	for i in range(len(c.response)):
-		if(c.response[i]["type"] == "searchResEntry"):
-			f.write(str(c.response[i]["attributes"]["samaccountname"]) + "\n")
-			count += 1
-
-print("[+] Found: {} AD Objects with Unconstrained Delegations".format(count))
-
-
-##### All objects with trusted for auth delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=16777216)
-c.search(search_base=default_search_base, search_filter='(msDS-AllowedToDelegateTo=*)', search_scope=ldap3.SUBTREE, attributes="*")
-
-with open(f"{save_dir}/full/objects_constrained_delegation_full.txt", "w") as f:
-	f.write(str(c.response))
-	
-countC = 0
-countCPT = 0
-with open(f"{save_dir}/delegation_constrained_objects.txt", "w") as f1:
-	with open(f"{save_dir}/delegation_constrained_w_protocol_transition_objects.txt", "w") as f2:
-		f1.write("SamAccountName: {objects that account can delegate for}\n")
-		f1.write("====================================================================\n")
-
-		f2.write("SamAccountName: {objects that account can delegate for}\n")
-		f2.write("====================================================================\n")
-		for i in range(len(c.response)):
-			if(c.response[i]["type"] == "searchResEntry"):
-				if(int(c.response[i]["attributes"]["useraccountcontrol"]) & 16777216):
-					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
-					countCPT += 1
-				else:
-					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
-					countC += 1
-
-print("[+] Found: {} AD Objects with Constrained Delegations".format(countC))
-print("[+] Found: {} AD Objects with Constrained Delegations with Protocol Transition".format(countCPT))
-
-
-c.search(search_base=default_search_base, search_filter='(msDS-AllowedToActOnBehalfOfOtherIdentity=*)', search_scope=ldap3.SUBTREE, attributes="*")
-
-with open(f"{save_dir}/full/objects_rbcd_delegation_full.txt", "w") as f:
-	f.write(str(c.response))
-	
-count = 0
-with open(f"{save_dir}/delegation_rbcd_objects.txt", "w") as f:
-	for i in range(len(c.response)):
-		if(c.response[i]["type"] == "searchResEntry"):
-			name = str(c.response[i]["attributes"]["samaccountname"])
-
-			sF = '(|'
-			sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=bytes(c.response[i]["attribute"]["msDS-AllowedToActOnBehalfOfOtherIdentity"]))
-			for ace in sd['Dacl'].aces:
-				sF = sF + "(objectSid="+ace['Ace']['Sid'].formatCanonical()+")"
-			sF = sF + ')'
-
-			c.search(search_base=default_search_base, search_filter=sF, search_scope=ldap3.BASE, attributes="*")
-
-			for dele in c.response:
-				f.write(f"{name} ::: delegates ::: {dele['attributes']['sAMAccountName']}\n")
-				count += 1
-
-
-c.search(search_base=default_search_base, search_filter='(ms-DS-MachineAccountQuota=*)', search_scope=ldap3.SUBTREE, attributes="ms-DS-MachineAccountQuota")
-
-
-print("[+] Found: {} AD Objects with Resource Based Constrained Delegations".format(count))
-print(f"[*] Machine Account Quota: {c.response[0]['attributes']['ms-DS-MachineAccountQuota']}")
-
-
-
-print("")
-print(f"Files saved in {save_dir} as delegation_*.txt")
-
-print("")
-
 print("")
 print("AD DNS Enumeration")
 print("=========================")
@@ -396,16 +247,13 @@ dns_resolver.nameservers = []
 ns_processed = []
 for ns in NS_records:
 	if(args.domain in ns["value"]): # does the dns server sit within the domain we are scanning
-		
-		ns_hash = f"{ns['value']}"
-		
-
-		if(ns_hash in ns_processed):
+				
+		if(ns['value'] in ns_processed):
 			continue
 
-		ns_processed.append(ns_hash)
+		ns_processed.append(ns['value'])
 
-		use_name = input(f"[+] Found Nameserver {ns_hash}, use this (Y/n): ")
+		use_name = input(f"[+] Found Nameserver {ns['value']}, use this (Y/n): ")
 
 		if(not "Y" in use_name and not "y" in use_name):
 			continue
@@ -577,3 +425,165 @@ for ip in system_ips:
 	print(f"[*] Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Spooler Scan for {ip}")
 	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M spooler")
 	print("")
+
+
+print("")
+print("Certificate Services")
+print("=========================")
+print("")
+
+print("[+] Scanning with certipy-ad")
+#TODO Different auth types
+os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
+
+
+### User Enumerations
+print("")
+print("User Enumerations")
+print("=========================")
+print("")
+
+##### Users with descriptions -> output to file (print number found)					(&(objectClass=user)(description=*))
+c.search(search_base=default_search_base, search_filter='(&(objectClass=user)(description=*))', search_scope=ldap3.SUBTREE, attributes="*")
+
+count = 0
+with open(f"{save_dir}/full/users_dcsrp_full.txt", "w") as f:
+	f.write(str(c.response))
+	
+with open(f"{save_dir}/users_dcsrp.txt", "w") as f:
+	for i in range(len(c.response)):
+		if(c.response[i]["type"] == "searchResEntry"):
+			f.write(str(c.response[i]["attributes"]["name"]) + ": " + str(c.response[i]["attributes"]["description"]) + "\n")
+			count += 1
+
+print("[+] Found {} users with descriptions".format(count))
+
+
+##### Users without a password set -> output to file (print number found)				(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))
+
+c.search(search_base=default_search_base, search_filter='(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))', search_scope=ldap3.SUBTREE, attributes="*")
+
+count = 0
+with open(f"{save_dir}/users_no_req_pass.txt", "w") as f:
+	for i in range(len(c.response)):
+		if(c.response[i]["type"] == "searchResEntry"):
+			f.write(str(c.response[i]["attributes"]["name"]) + "\n")
+			count += 1
+	
+with open(f"{save_dir}/full/users_no_req_pass_full.txt", "w") as f:
+	f.write(str(c.response))
+	
+print("[+] Found {} users without required passwords".format(count))
+
+print("")
+
+##### Users where ASP-REP roasting is possible
+####### Retrieve tickets -> output to file
+# Make sure that there is a route to the nameserver (ie, cme needed dc01.inlanefreight.htb in /etc/hosts to work)
+# TODO change for dependance on auth method
+print(f"[+] Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting (output hidden)")  
+os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --asreproast {save_dir}/users_asreproast.txt > /dev/null")
+print("")
+
+######## Option to crack hashes in background
+
+##### Users where Kerberoasting is possible
+####### Retrieve tickets -> output to file
+
+# 
+# TODO change for dependance on auth method
+print(f"[+] Performing {bcolors.PURPLE}CME{bcolors.ENDC} kerberoasting (output hidden)")  
+os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --kerberoasting {save_dir}/users_kerberoasting.txt > /dev/null")
+print("")
+######## Option to crack hashes in background?
+
+print("")
+print(f"Files saved in {save_dir} as users_*.txt")
+
+print("")
+print("Delegation Enumeration")
+print("=========================")
+print("")
+
+
+##### All objects with trusted for delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=524288)
+c.search(search_base=default_search_base, search_filter='(userAccountControl:1.2.840.113556.1.4.803:=524288)', search_scope=ldap3.SUBTREE, attributes="*")
+
+with open(f"{save_dir}/full/objects_unconstrained_delegation_full.txt", "w") as f:
+	f.write(str(c.response))
+	
+count = 0
+with open(f"{save_dir}/delegation_unconstrained_objects.txt", "w") as f:
+	for i in range(len(c.response)):
+		if(c.response[i]["type"] == "searchResEntry"):
+			f.write(str(c.response[i]["attributes"]["samaccountname"]) + "\n")
+			count += 1
+
+print("[+] Found: {} AD Objects with Unconstrained Delegations".format(count))
+
+
+##### All objects with trusted for auth delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=16777216)
+c.search(search_base=default_search_base, search_filter='(msDS-AllowedToDelegateTo=*)', search_scope=ldap3.SUBTREE, attributes="*")
+
+with open(f"{save_dir}/full/objects_constrained_delegation_full.txt", "w") as f:
+	f.write(str(c.response))
+	
+countC = 0
+countCPT = 0
+with open(f"{save_dir}/delegation_constrained_objects.txt", "w") as f1:
+	with open(f"{save_dir}/delegation_constrained_w_protocol_transition_objects.txt", "w") as f2:
+		f1.write("SamAccountName: {objects that account can delegate for}\n")
+		f1.write("====================================================================\n")
+
+		f2.write("SamAccountName: {objects that account can delegate for}\n")
+		f2.write("====================================================================\n")
+		for i in range(len(c.response)):
+			if(c.response[i]["type"] == "searchResEntry"):
+				if(int(c.response[i]["attributes"]["useraccountcontrol"]) & 16777216):
+					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
+					countCPT += 1
+				else:
+					f2.write(str(c.response[i]["attributes"]["samaccountname"]) + ": " + str(c.response[i]["attributes"]["msDS-AllowedToDelegateTo"]) + "\n")
+					countC += 1
+
+print("[+] Found: {} AD Objects with Constrained Delegations".format(countC))
+print("[+] Found: {} AD Objects with Constrained Delegations with Protocol Transition".format(countCPT))
+
+
+c.search(search_base=default_search_base, search_filter='(msDS-AllowedToActOnBehalfOfOtherIdentity=*)', search_scope=ldap3.SUBTREE, attributes="*")
+
+with open(f"{save_dir}/full/objects_rbcd_delegation_full.txt", "w") as f:
+	f.write(str(c.response))
+	
+count = 0
+with open(f"{save_dir}/delegation_rbcd_objects.txt", "w") as f:
+	for i in range(len(c.response)):
+		if(c.response[i]["type"] == "searchResEntry"):
+			name = str(c.response[i]["attributes"]["samaccountname"])
+
+			sF = '(|'
+			sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=bytes(c.response[i]["attribute"]["msDS-AllowedToActOnBehalfOfOtherIdentity"]))
+			for ace in sd['Dacl'].aces:
+				sF = sF + "(objectSid="+ace['Ace']['Sid'].formatCanonical()+")"
+			sF = sF + ')'
+
+			c.search(search_base=default_search_base, search_filter=sF, search_scope=ldap3.BASE, attributes="*")
+
+			for dele in c.response:
+				f.write(f"{name} ::: delegates ::: {dele['attributes']['sAMAccountName']}\n")
+				count += 1
+
+
+c.search(search_base=default_search_base, search_filter='(ms-DS-MachineAccountQuota=*)', search_scope=ldap3.SUBTREE, attributes="ms-DS-MachineAccountQuota")
+
+
+print("[+] Found: {} AD Objects with Resource Based Constrained Delegations".format(count))
+print(f"[*] Machine Account Quota: {c.response[0]['attributes']['ms-DS-MachineAccountQuota']}")
+
+
+
+print("")
+print(f"Files saved in {save_dir} as delegation_*.txt")
+
+print("")
+

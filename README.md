@@ -6,3 +6,5 @@ Impacket required
 CME required
 
 Nmap required
+
+Certipy required
