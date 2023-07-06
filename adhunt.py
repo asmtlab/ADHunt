@@ -34,6 +34,7 @@ class bcolors:
 
 if(os.name != "posix"):
 	print("AD Hunt only works in a linux enviroment.")
+	sys.exit(1)
 
 if(sys.version_info[0] != 3):
 	print("{0}Warning: This script has only been tested for python3{1}".format(bcolors.WARNING, bcolors.ENDC))
@@ -68,9 +69,11 @@ if(args.install):
 
 if(not args.domain_controller_ip):
 	print("Must specify the ip of a domain controller with -dc-ip")
+	sys.exit(1)
 
 if(args.username != None and args.password == None):
 	print("If a username is supplied a password must also be supplied")
+	sys.exit(1)
 
 # TODO figure out if this is nessecary
 if(args.username == None):
