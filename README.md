@@ -32,7 +32,7 @@ First things first, run the install command to ensure all the necessary dependan
 python3 adhunt.py -i
 ```
 
-Now that all of the necessary dependancies are installed if we had already cracked the user account "adam:P4ssW0rd" we could run the tool as follows and enumerate some juicy information.
+Now that all of the necessary dependancies are installed if we had already cracked the user account "adam:P4ssW0rd" we could run the tool as follows and enumerate information.
 
 ```
 python3 -i adhunt.py -u adam -p P4ssW0rd -d example.com --dc-ip 10.129.133.45
