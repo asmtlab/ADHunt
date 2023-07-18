@@ -31,7 +31,7 @@ parser.add_argument("-i", "--install", action='store_true', help="install nessec
 parser.add_argument("--dc-ip", dest="domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
 parser.add_argument("-u", "--username", help="The username of the user for enumation purposes")
 parser.add_argument("-p", "--password", help="The password of the supplied user")
-parser.add_argument("-d", "--domain", help="The domain of the given user")
+parser.add_argument("-d", "--domain", help="The domain of the given user, fetched automatically from LDAP service name")
 parser.add_argument("-s", "--scope", help=f"The scope of valid ips for checking ranges when performing vulnerability scanning and enumeration. Include ranges with {bcolors.HELPHIGHLIGHT}i{bcolors.ENDC}, and exclude with {bcolors.HELPHIGHLIGHT}e{bcolors.ENDC}. Seperate args by commas, For example a valid scope would be {bcolors.HELPEXAMPLE}--scope i:10.129.0.0/24,e:10.129.0.129{bcolors.ENDC}")
 parser.add_argument("--detection-mode", help=f"options: ({bcolors.HELPHIGHLIGHT}aggressive{bcolors.ENDC}, {bcolors.HELPHIGHLIGHT}moderate{bcolors.ENDC}, {bcolors.HELPHIGHLIGHT}passive{bcolors.ENDC}), default is passive (only scan ips found from ad dns information), moderate (scan ips from ad dns and perform regular dns enumeration), aggressive (scan everything in scope)")
 # parser.add_argument("--ssl", help="should we try to connect with ssl")
@@ -76,11 +76,11 @@ if(args.install):
 # TODO most LDAP searchs will fetch deactivated accounts
 
 if(not args.domain_controller_ip):
-	print("Must specify the ip of a domain controller with -dc-ip")
+	print("Must specify the ip of a domain controller with -dc-ip") #eventually not required for aggressive scanning
 	sys.exit(1)
 
 if(args.username != None and args.password == None):
-	print("If a username is supplied a password must also be supplied")
+	print("If a username is supplied a password must also be supplied, Unauthenticated Bind in progress") #TODO unauthenticated bind vs anonymous bind
 	sys.exit(1)
 
 # TODO figure out if this is nessecary
@@ -98,8 +98,19 @@ if(args.username == None):
 	sys.exit(0)
 
 if(not args.domain):
-	print("A domain must be supplied.")
-	sys.exit(1)
+	s = Server(args.domain_controller_ip, get_info = ALL)
+	c = Connection(s)
+	if(not c.bind()):
+		print(c.result)
+		print("Could not get domain automatically")
+	else:
+		try:
+			args.domain = s.info.other["ldapServiceName"][0].split("@")[1]
+		except Exception as e:
+			print(e)
+			print("Could not get domain automatically")
+	c.unbind()
+
 
 # Definetely feel like this could be more effienct, but ipv6 support is throwing me off from using bitmask along with structs unpacking differently on different platforms? (might be a problem for dns)
 scopeEnabled = False
