@@ -72,8 +72,10 @@ if(args.install):
 	os.system("apt install nmap")
 	sys.exit(0)
 
-
+## TODOLIST
 # TODO most LDAP searchs will fetch deactivated accounts
+# TODO Multiple auth types
+# TODO CME along with others will break if there are no routes to services, ie dc01.inlane.htb is not in /etc/hosts
 
 if(not args.domain_controller_ip):
 	print("Must specify the ip of a domain controller with -dc-ip") #eventually not required for aggressive scanning
@@ -530,6 +532,7 @@ for ip in system_ips:
 	if(ip in dc_ip):
 			print(f"{bcolors.INSTALL}[!]{bcolors.ENDC} {ip} is a domain controller, running extra checks")
 			print("")
+			# TODO AUTH dependant
 			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
 			os.system(f"crackmapexec ldap {ip} -u '{args.username}' -p '{args.password}' -M ldap-checker")
 			print("")
@@ -538,6 +541,11 @@ for ip in system_ips:
 			os.system(f"crackmapexec smb {ip} -u '' -p '' -M petitpotam")
 			print("")
 			
+			# TODO Auth dependant
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Credentialed Petitpotam Scan for {domain_controller_name}")
+			os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}' -M petitpotam")
+			print("")
+
 			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {domain_controller_name}")
 			os.system(f"crackmapexec smb {ip} -u '' -p '' -M ms17-010")
 			print("")
