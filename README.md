@@ -1,4 +1,4 @@
-# ADHunt v1.0.0
+# ADHunt v2.0
 ## Description
 AD Hunt is a tool for enumerating Active Directory Enviroments looking for interesting AD objects, vulnerabilities, and misconfigurations. It currently uses a combination ldap queries and available tooling. It was built as a follow up to [LinWinPwn](https://github.com/lefayjey/linWinPwn).
 
