@@ -8,16 +8,7 @@ import argparse
 from dns_structures import *
 from impacket.ldap import ldaptypes
 import dns.resolver
-
-parser = argparse.ArgumentParser(prog="python3 adhunt.py", description="""Active Directory Enumeration tool""")
-parser.add_argument("-i", "--install", action='store_true', help="install nessecary components")
-parser.add_argument("--dc-ip", dest="domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
-parser.add_argument("-u", "--username", help="The username of the user for enumation purposes")
-parser.add_argument("-p", "--password", help="The password of the supplied user")
-parser.add_argument("-d", "--domain", help="The domain of the given user")
-# parser.add_argument("--ssl", help="should we try to connect with ssl")
-
-args = parser.parse_args()
+import ipaddress
 
 # colors from https://gist.github.com/nazwadi/ca00352cd0d20b640efd
 class bcolors:
@@ -32,6 +23,22 @@ class bcolors:
     UNDERLINE = '\033[4m'
     INSTALL = '\x1B[38;5;166m'
     CMD = '\x1B[38;5;151m'
+    HELPEXAMPLE = '\x1B[38;5;220m'
+    HELPHIGHLIGHT = '\x1B[38;5;128m'
+
+parser = argparse.ArgumentParser(prog="python3 adhunt.py", description="""Active Directory Enumeration tool""")
+parser.add_argument("-i", "--install", action='store_true', help="install nessecary components")
+parser.add_argument("--dc-ip", dest="domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
+parser.add_argument("-u", "--username", help="The username of the user for enumation purposes")
+parser.add_argument("-p", "--password", help="The password of the supplied user")
+parser.add_argument("-d", "--domain", help="The domain of the given user")
+parser.add_argument("-s", "--scope", help=f"The scope of valid ips for checking ranges when performing vulnerability scanning and enumeration. Include ranges with {bcolors.HELPHIGHLIGHT}i{bcolors.ENDC}, and exclude with {bcolors.HELPHIGHLIGHT}e{bcolors.ENDC}. Seperate args by commas, For example a valid scope would be {bcolors.HELPEXAMPLE}--scope i:10.129.0.0/24,e:10.129.0.129{bcolors.ENDC}")
+parser.add_argument("--detection-mode", help=f"options: ({bcolors.HELPHIGHLIGHT}aggressive{bcolors.ENDC}, {bcolors.HELPHIGHLIGHT}moderate{bcolors.ENDC}, {bcolors.HELPHIGHLIGHT}passive{bcolors.ENDC}), default is passive (only scan ips found from ad dns information), moderate (scan ips from ad dns and perform regular dns enumeration), aggressive (scan everything in scope)")
+# parser.add_argument("--ssl", help="should we try to connect with ssl")
+
+args = parser.parse_args()
+
+
 
 if(os.name != "posix"):
 	print("AD Hunt only works in a linux enviroment.")
@@ -94,6 +101,38 @@ if(not args.domain):
 	print("A domain must be supplied.")
 	sys.exit(1)
 
+# Definetely feel like this could be more effienct, but ipv6 support is throwing me off from using bitmask along with structs unpacking differently on different platforms? (might be a problem for dns)
+scopeEnabled = False
+scopeInclude = []
+scopeExclude = []
+if(args.scope):
+	scopeEnabled = True
+	scopeList = args.scope.split(",")
+
+	for ipr in scopeList:
+		if(ipr.startswith("i:")):
+			scopeInclude.append(ipaddress.ip_network(ipr[2:]))
+		elif(ipr.startswith("e:")):
+			scopeExclude.append(ipaddress.ip_network(ipr[2:]))
+		else:
+			print("Invalid scope...")
+			sys.exit(1)
+
+"""
+Returns true if ip is in scope
+returns false if ip is not in scope
+"""
+def checkScope(ipt: str):
+	new_ip = ipaddress.ip_address(ipt)
+	for ipn in scopeExclude:
+		if(new_ip in ipn):
+			return False
+
+	for ipn in scopeInclude:
+		if(new_ip in ipn):
+			return True
+		
+	return False
 
 s = Server(args.domain_controller_ip, get_info = ALL)
 c = Connection(s, f"{args.domain}\\{args.username}", args.password, authentication="NTLM")
@@ -313,10 +352,10 @@ for ns in NS_records:
 
 		ns_processed.append(ns['value'])
 
-		use_name = input(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found Nameserver {ns['value']}, use this (Y/n): ")
-
-		if(not "Y" in use_name and not "y" in use_name):
-			continue
+		if(not scopeEnabled): # if scope is enabled we will just check if the nameserver is in scope then use it if it is.
+			use_name = input(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Found Nameserver {ns['value']}, use this (Y/n): ")
+			if(not "Y" in use_name and not "y" in use_name):
+				continue
 
 		# DNS records in AD are stored at the subdomain component so we need to fetch that
 		query = ns["value"].split(args.domain)[0] #is this a subdomain  [dc01].inlanefrieght.htb.
@@ -332,15 +371,19 @@ for ns in NS_records:
 				matching_ips.add(a["value"])
 
 		for ip in matching_ips:
-			use = input(f"[?] Found IP: {ip} for {ns['value']}. Use this IP (Y/n): ")
-			if("Y" in use or "y" in use):
-				dns_resolver.nameservers.append(ip)
+			if(scopeEnabled):
+				if(checkScope(ip)):
+					dns_resolver.nameservers.append(ip)
+			else:
+				use = input(f"[?] Found IP: {ip} for {ns['value']}. Use this IP (Y/n): ")
+				if("Y" in use or "y" in use):
+					dns_resolver.nameservers.append(ip)
 
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Name Servers have been set as {dns_resolver.nameservers}")
 
 ### Domain controllers identifications
 print("")
-print(f"{bcolors.BOLD}Domain Controller Scanning{bcolors.ENDC}")
+print(f"{bcolors.BOLD}Domain Controller Identification{bcolors.ENDC}")
 print("=========================")
 print("")
 # get all NTDSDSA objects, only domain controllers run this service
@@ -370,58 +413,31 @@ for i in range(len(results)):
 			print("Skipping Vuln testing for this DC")
 			continue
 		
-		print(f"DNS search revealed the following IPs for {domain_controller_name}:")
-		print(f"Please select the number of the IP which you would like to use:")
-
-		for ip_num in range(len(vals)):
-			print(f"[{ip_num}] {vals[ip_num]}")
-
-		print(f"[{ip_num+1}] Don't use any of these (skips testing)")
-
-		selected_ip = int(input(": "))
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} AD DNS search revealed the following Domain Controller {domain_controller_name}")
 		
-
-		if(selected_ip == ip_num+1):
-			print("Skipping Vuln testing for this DC")
-			continue
-		elif(not selected_ip in range(len(vals))): #could make this loop
-			print("Unknown Input, Skipping Vuln testing for this DC") 
-			continue
+		if(scopeEnabled):
+			for ip in vals:
+				if(checkScope(ip)):
+					dc_ip.append(ip)
 		else:
-			dc_ip.append(vals[selected_ip])
+			print(f"Please select the IP which you would like to use for this DC:")
 
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {domain_controller_name} ")
-			os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {vals[selected_ip]}")
-			print("")
+			for ip_num in range(len(vals)):
+				print(f"[{ip_num}] {vals[ip_num]}")
 
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
-			os.system(f"crackmapexec ldap {vals[selected_ip]} -u '{args.username}' -p '{args.password}' -M ldap-checker")
-			print("")
+			print(f"[{ip_num+1}] Don't use any of these (skips dc specific testing)")
 
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Petitpotam Scan for {domain_controller_name}")
-			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M petitpotam")
-			print("")
+			selected_ip = int(input(": "))
 			
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {domain_controller_name}")
-			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M ms17-010")
-			print("")
-			
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} DFSCoerce Scan for {domain_controller_name}")
-			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M dfscoerce")
-			print("")
-			
-			
-			""" TODO Zerologon is broken and does not close crackmapexec after completing """
-			""" print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Zerologon Scan for {domain_controller_name}")
-			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M zerologon")
-			os.system(f"pkill crackmapexec")
-			print("") """
-			
+			if(selected_ip == ip_num+1):
+				print("Skipping DC Vuln testing for this system")
+				continue
+			elif(not selected_ip in range(len(vals))): #could make this re-ask for number
+				print("Unknown Input, Skipping Vuln testing for this DC") 
+				continue
+			else:
+				dc_ip.append(vals[selected_ip])
 
-			#TODO this is dependant on authentication type
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} NoPac Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
-			os.system(f"crackmapexec smb {vals[selected_ip]} -u '{args.username}' -p '{args.password}' -M nopac")
-			print("")
 
 
 print("")
@@ -435,18 +451,25 @@ system_ips = set()
 seen_ips = set()
 
 # LinWinPwn uses the adinaddump service to find ips, we will use 2 methods
-c.extend.standard.paged_search(search_base=default_search_base, search_filter='(dnshostname=*)', search_scope=ldap3.SUBTREE, attributes=["dnshostname"], generator=False)
 
+# Method 1: search our previously obtained A records for IPS
 for a in A_records:
 	if(a['value'] in seen_ips):
 		continue
 	seen_ips.add(a['value'])
-	ip_dns = input(f"[?] AD-DNS found ip: {a['value']}, use this IP (y/n): ")
-	if("Y" in ip_dns or "y" in ip_dns):
-		system_ips.add(a['value'])
+	if(scopeEnabled):
+		if(checkScope(a['value'])):
+			system_ips.add(a['value'])
+	else:
+		ip_dns = input(f"[?] AD-DNS found ip: {a['value']}, scan this IP (y/n): ")
+		if("Y" in ip_dns or "y" in ip_dns):
+			system_ips.add(a['value'])
 
+# Method 2: Check for services running and ask the DNS servers we found to get us an ip for the services
 # resolver should already be setup
 print("Checking for services")
+
+c.extend.standard.paged_search(search_base=default_search_base, search_filter='(dnshostname=*)', search_scope=ldap3.SUBTREE, attributes=["dnshostname"], generator=False)
 
 for section in c.response:
 	if(section["type"] == "searchResEntry"):
@@ -463,10 +486,14 @@ for section in c.response:
 			if(response.to_text() in seen_ips):
 				continue
 			seen_ips.add(response.to_text())
-			ip_dns = input(f"[?] DNS Resolved an IP {response.to_text()}, use this IP (y/n): ")
 			
-			if("Y" in ip_dns or "y" in ip_dns):
-				system_ips.add(response.to_text())
+			if(scopeEnabled):
+				if(checkScope(response.to_text())):
+					system_ips.add(response.to_text())
+			else:
+				ip_dns = input(f"[?] DNS Resolved an IP {response.to_text()}, use this IP (y/n): ")
+				if("Y" in ip_dns or "y" in ip_dns):
+					system_ips.add(response.to_text())
 
 if(len(system_ips) > 0):
 	print("")
@@ -474,6 +501,8 @@ if(len(system_ips) > 0):
 	print("")
 
 for ip in system_ips:
+	print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Check for {ip}")
+
 	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}NMAP{bcolors.ENDC} SMB Signing Scan for {ip} ")
 	os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}")
 	print("")
@@ -487,6 +516,36 @@ for ip in system_ips:
 	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M spooler")
 	print("")
 
+	if(ip in dc_ip):
+			print(f"{bcolors.INSTALL}[!]{bcolors.ENDC} {ip} is a domain controller, running extra checks")
+			print("")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
+			os.system(f"crackmapexec ldap {ip} -u '{args.username}' -p '{args.password}' -M ldap-checker")
+			print("")
+
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Petitpotam Scan for {domain_controller_name}")
+			os.system(f"crackmapexec smb {ip} -u '' -p '' -M petitpotam")
+			print("")
+			
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {domain_controller_name}")
+			os.system(f"crackmapexec smb {ip} -u '' -p '' -M ms17-010")
+			print("")
+			
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} DFSCoerce Scan for {domain_controller_name}")
+			os.system(f"crackmapexec smb {ip} -u '' -p '' -M dfscoerce")
+			print("")
+			
+			""" TODO Zerologon is broken and does not close crackmapexec after completing """
+			""" print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Zerologon Scan for {domain_controller_name}")
+			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M zerologon")
+			os.system(f"pkill crackmapexec")
+			print("") """
+			
+			#TODO this is dependant on authentication type
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} NoPac Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
+			os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}' -M nopac")
+			print("")
+
 
 print("")
 print(f"{bcolors.BOLD}Certificate Services{bcolors.ENDC}")
@@ -496,7 +555,7 @@ print("")
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Scanning with certipy-ad")
 #TODO Different auth types
 #TODO often certipy finds the wrong ip for connecting too
-os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
+os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -target-ip '{args.domain_controller_ip}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
 
 
 ### User Enumerations
@@ -541,7 +600,7 @@ print("")
 
 ##### Users where ASP-REP roasting is possible
 ####### Retrieve tickets -> output to file
-# Make sure that there is a route to the nameserver (ie, cme needed dc01.inlanefreight.htb in /etc/hosts to work)
+# TODO Make sure that there is a route to the nameserver (ie, cme needed dc01.inlanefreight.htb in /etc/hosts to work)
 # TODO change for dependance on auth method
 # TODO this breaks randomly when it cannot automatically determine ip of dc (usually grabs the wrong one, same issue with certipy)
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting (output hidden)")  
