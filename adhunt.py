@@ -380,6 +380,7 @@ class AD_Hunt:
 	
 	# TODO LIST 
 	# - IPv6 support
+	# - save ips somewhere?
 	# - aggressive: full scope scanning
 	"""
 	def systemEnumeration(self, A_records: list, dns_resolver):
@@ -805,17 +806,27 @@ class AD_Hunt:
 		args = self.args
 		# Run scans
 
-		self.passwordPolicies()
-		self.delegationEnumeration()
-		self.userEnumeration()
-		self.certificateEnumeration()
-		ns_r, a_r = self.ADDNSEnumeration()
-		dns_resolver = self.NSEnumeration(ns_r, a_r)
-		dc_ips = self.DCEnumeration(a_r)
-		system_ips = self.systemEnumeration(a_r, dns_resolver)
+
+		if(not args.just or "pass-pols" in args.just):
+			self.passwordPolicies()
+		if(not args.just or "delegations" in args.just):
+			self.delegationEnumeration()
+		if(not args.just or "users" in args.just):
+			self.userEnumeration()
+		if(not args.just or "certificates" in args.just):
+			self.certificateEnumeration()
+		if(not args.just or any(x in ['ad-dns', 'nameservers', 'domain-controllers', 'systems', 'system-vulns'] for x in args.just)):
+			ns_r, a_r = self.ADDNSEnumeration()
+		if(not args.just or any(x in ['nameservers', 'domain-controllers', 'systems', 'system-vulns'] for x in args.just)):
+			dns_resolver = self.NSEnumeration(ns_r, a_r)
+		if(not args.just or any(x in ['domain-controllers', 'systems', 'system-vulns'] for x in args.just)):
+			dc_ips = self.DCEnumeration(a_r)
+		if(not args.just or any(x in ['systems', 'system-vulns'] for x in args.just)):
+			system_ips = self.systemEnumeration(a_r, dns_resolver) #depends on nameservers, ad-dns
 
 		if(not args.no_scan):
-			self.systemVulncheck(system_ips, dc_ips)
+			if(not args.just or 'system-vulns' in args.just):
+				self.systemVulncheck(system_ips, dc_ips) #depends on systems, domain_controllers
 		
 	"""
 	Gets commandline arguments from the user and parses them. Then it calls the setup method.
@@ -860,10 +871,10 @@ class AD_Hunt:
 		
 		parser.add_argument("--ssl", help="Should connections be made with ssl", action='store_true')
 
-		
+		self.tests = ["pass-pols", "delegations", "users", "certificates", "ad-dns", "nameservers", "domain-controllers", "systems", "system-vulns"]
+		parser.add_argument("--just", choices=self.tests, help="only run the specified check(s) and its required other checks", nargs="+")
 
 		self.args = parser.parse_args()
-
 
 		if(os.name != "posix"):
 			print("AD Hunt only works in a linux enviroment.")
