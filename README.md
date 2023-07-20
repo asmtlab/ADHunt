@@ -48,7 +48,6 @@ options:
   --ssl                 Should connections be made with ssl
   --just {pass-pols,delegations,users,certificates,ad-dns,nameservers,domain-controllers,systems,system-vulns,smb} [{pass-pols,delegations,users,certificates,ad-dns,nameservers,domain-controllers,systems,system-vulns,smb} ...]
                         only run the specified check(s) and its required other checks
-
 ```
 
 First things first, run the install command to ensure all the necessary dependancies are taken care of.
