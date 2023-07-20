@@ -319,7 +319,7 @@ class AD_Hunt:
 		# get all NTDSDSA objects, only domain controllers run this service
 		c.extend.standard.paged_search(search_base=s.info.other.get('ConfigurationNamingContext')[0], search_filter='(objectClass=nTDSDSA)', search_scope=ldap3.SUBTREE, attributes=["distinguishedName"], generator=False)
 
-		dc_ip = []
+		dc_ip = set()
 
 		results = c.response 
 		for i in range(len(results)):
@@ -348,7 +348,7 @@ class AD_Hunt:
 				if(args.scopeEnabled):
 					for ip in vals:
 						if(self.checkScope(ip)):
-							dc_ip.append(ip)
+							dc_ip.add(ip)
 				else:
 					print(f"Please select the IP which you would like to use for this DC:")
 
@@ -366,8 +366,9 @@ class AD_Hunt:
 						print("Unknown Input, Skipping Vuln testing for this DC") 
 						continue
 					else:
-						dc_ip.append(vals[selected_ip])
-
+						dc_ip.add(vals[selected_ip])
+		
+		dc_ip.add(args.domain_controller_ip)
 		return dc_ip
 
 	"""
@@ -442,7 +443,8 @@ class AD_Hunt:
 						ip_dns = input(f"[?] DNS Resolved an IP {response.to_text()}, use this IP (y/n): ")
 						if("Y" in ip_dns or "y" in ip_dns):
 							system_ips.add(response.to_text())
-
+		
+		system_ips.add(args.domain_controller_ip)
 		return system_ips
 	
 	"""
@@ -472,15 +474,6 @@ class AD_Hunt:
 		# remember pass = hash in the case where the hash is set
 
 		for ip in system_ips:
-			print(f"{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Check for {ip}")
-
-			print(f"{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Runinng {self.bcolors.PURPLE}NMAP{self.bcolors.ENDC} SMB Signing Scan for {ip} ")
-			if(args.quiet):
-				ret = os.popen(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}").read()
-				print(f"{self.bcolors.INSTALL}[*]{self.bcolors.ENDC} " + ret.split("|_")[1].split("\n")[0].strip())
-			else:
-				os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}")
-
 
 			print(f"{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Runinng {self.bcolors.PURPLE}CME{self.bcolors.ENDC} WebDav Scan for {ip}")
 			if(args.quiet):
@@ -783,6 +776,47 @@ class AD_Hunt:
 		print("")
 
 	"""
+	Handles checking for smb misconfigurations and does enumeration by share spidering
+
+	Num of LDAP queries: 0
+	Created files: O(n)
+	"""
+	def smbEnumeration(self, system_ips: list):
+		args = self.args
+
+		print("")
+		print(f"{self.bcolors.BOLD}SMB Enumeration{self.bcolors.ENDC}")
+		print("=========================")
+		print("")
+
+		pHVal = "-p"
+		if(args.hash):
+			pHVal = "-H"
+
+		for ip in system_ips:
+			print(f"{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Check for {ip}")
+
+			print(f"{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Runinng {self.bcolors.PURPLE}NMAP{self.bcolors.ENDC} SMB Signing Scan for {ip}")
+			if(args.quiet):
+				ret = os.popen(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}").read()
+				try:
+					print(f"{self.bcolors.INSTALL}[*]{self.bcolors.ENDC} " + ret.split("|_")[1].split("\n")[0].strip())
+				except:
+					print(f"{self.bcolors.INSTALL}[*]{self.bcolors.ENDC} It appears SMB is not enabled on {ip}:445")
+			else:
+				os.system(f"nmap --script smb-security-mode.nse,smb2-security-mode.nse -p445 {ip}")
+
+			# Share spidering
+			print(f"{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Runinng {self.bcolors.PURPLE}CME{self.bcolors.ENDC} Share spider for {ip}")
+			if(args.quiet):
+				ret = os.popen(f"crackmapexec smb {ip} -u '{args.username}' {pHVal} '{args.password}' -M spider_plus -o OUTPUT={args.save_dir}/smb").read()
+			else:
+				os.system(f"crackmapexec smb {ip} -u '{args.username}' {pHVal} '{args.password}' -M spider_plus -o OUTPUT={args.save_dir}/smb")
+			
+		print("")
+		print(f"Files saved in {args.save_dir}/smb as [ip].txt")
+
+	"""
 	This runs system commands to install the dependancies needed for this program
 	"""
 	def install(self):
@@ -815,19 +849,20 @@ class AD_Hunt:
 			self.userEnumeration()
 		if(not args.just or "certificates" in args.just):
 			self.certificateEnumeration()
-		if(not args.just or any(x in ['ad-dns', 'nameservers', 'domain-controllers', 'systems', 'system-vulns'] for x in args.just)):
+		if(not args.just or any(x in ['ad-dns', 'nameservers', 'domain-controllers', 'systems', 'system-vulns', 'smb'] for x in args.just)):
 			ns_r, a_r = self.ADDNSEnumeration()
-		if(not args.just or any(x in ['nameservers', 'domain-controllers', 'systems', 'system-vulns'] for x in args.just)):
+		if(not args.just or any(x in ['nameservers', 'domain-controllers', 'systems', 'system-vulns', 'smb'] for x in args.just)):
 			dns_resolver = self.NSEnumeration(ns_r, a_r)
-		if(not args.just or any(x in ['domain-controllers', 'systems', 'system-vulns'] for x in args.just)):
+		if(not args.just or any(x in ['domain-controllers', 'systems', 'system-vulns', 'smb'] for x in args.just)):
 			dc_ips = self.DCEnumeration(a_r)
-		if(not args.just or any(x in ['systems', 'system-vulns'] for x in args.just)):
+		if(not args.just or any(x in ['systems', 'system-vulns', 'smb'] for x in args.just)):
 			system_ips = self.systemEnumeration(a_r, dns_resolver) #depends on nameservers, ad-dns
 
 		if(not args.no_scan):
 			if(not args.just or 'system-vulns' in args.just):
 				self.systemVulncheck(system_ips, dc_ips) #depends on systems, domain_controllers
-		
+			if(not args.just or 'smb' in args.just):
+				self.smbEnumeration(system_ips)
 	"""
 	Gets commandline arguments from the user and parses them. Then it calls the setup method.
 	"""
@@ -871,7 +906,7 @@ class AD_Hunt:
 		
 		parser.add_argument("--ssl", help="Should connections be made with ssl", action='store_true')
 
-		self.tests = ["pass-pols", "delegations", "users", "certificates", "ad-dns", "nameservers", "domain-controllers", "systems", "system-vulns"]
+		self.tests = ["pass-pols", "delegations", "users", "certificates", "ad-dns", "nameservers", "domain-controllers", "systems", "system-vulns", "smb"]
 		parser.add_argument("--just", choices=self.tests, help="only run the specified check(s) and its required other checks", nargs="+")
 
 		self.args = parser.parse_args()
@@ -960,9 +995,11 @@ class AD_Hunt:
 		if(args.hash):
 			self.c = Connection(self.s, f"{args.domain}\\{args.username}", args.hash, authentication="NTLM")
 			args.password = args.hash
-		else:
+		elif(args.password != ''):
 			self.c = Connection(self.s, f"{args.domain}\\{args.username}", args.password, authentication="NTLM")
-
+		else:
+			self.c = Connection(self.s)
+			
 		if(not self.c.bind()):
 			print(self.c.result)
 			sys.exit(1)
