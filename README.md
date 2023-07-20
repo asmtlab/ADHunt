@@ -2,7 +2,7 @@
 ## Description
 AD Hunt is a tool for enumerating Active Directory Enviroments looking for interesting AD objects, vulnerabilities, and misconfigurations. It currently uses a combination ldap queries and available tooling. It was built as a follow up to [LinWinPwn](https://github.com/lefayjey/linWinPwn).
 
-It currently enumerates the enviroment looking for DNS information, 
+It currently enumerates the enviroment looking for DNS information, AD information, and SMB information
 
 ## Use Cases
 
