@@ -893,7 +893,7 @@ class AD_Hunt:
 		
 		parser.add_argument("-d", "--domain", help="The domain of the given user, if not provided fetched automatically from LDAP service name")
 		
-		parser.add_argument("-s", "--scope", help=f"The scope of valid ips for checking ranges when performing vulnerability scanning and enumeration. Include ranges with {self.bcolors.HELPHIGHLIGHT}i{self.bcolors.ENDC}, and exclude with {self.bcolors.HELPHIGHLIGHT}e{self.bcolors.ENDC}. Seperate args by commas, For example a valid scope would be {self.bcolors.HELPEXAMPLE}--scope i:10.129.0.0/24,e:10.129.0.129{self.bcolors.ENDC}")
+		parser.add_argument("-s", "--scope", help=f"The scope of valid ips for checking ranges when performing vulnerability scanning and enumeration. Include ranges with i, and exclude with e. Seperate args by commas, For example a valid scope would be {self.bcolors.HELPEXAMPLE}--scope i:10.129.0.0/24,e:10.129.0.129{self.bcolors.ENDC}")
 		
 		parser.add_argument("--detection-mode", choices={"aggressive", "moderate", "passive", "stealthy"}, 
 		      help=f"passive [default] (only scan ips found from ad dns information), moderate (scan ips from ad dns and perform regular dns enumeration), aggressive (scan everything in scope), stealthy (TODO)") #TODO
