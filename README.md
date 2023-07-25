@@ -64,3 +64,6 @@ python3 -i adhunt.py -u adam -p P4ssW0rd -d example.com --dc-ip 10.129.133.45
 
 ### How it works
 The script is broken down into modules.  These modules provide the actual enumeration and run all the tests.  The current active modules are pass-pols,delegations,users,certificates,ad-dns,nameservers,domain-controllers,systems,system-vulns,smb.  You can learn more about them by checking out the source code.  By default all modules are run, however in the case where you might just want to run a specific module, you can do that too. Be aware though that some modules are dependant on other modules. In order for them to run those modules must run too and will run even when not specified.  
+
+### Author
+[Charlie Fligg](https://github.com/FL1GG) - Charlie.Fligg@cisa.dhs.gov
