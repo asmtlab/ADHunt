@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-from ldap3 import *
 import sys
 import os
 import argparse
@@ -29,15 +28,15 @@ class AD_Hunt:
 	"""
 	def install(self):
 		print("Installing... (are you root?)")
-		print(f"{self.bcolors.INSTALL}{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Installing pip3{self.bcolors.ENDC}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Installing pip3{bcolors.ENDC}")
 		os.system("apt install python3-pip")
-		print(f"{self.bcolors.INSTALL}{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Installing Impacket{self.bcolors.ENDC}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Installing Impacket{bcolors.ENDC}")
 		os.system("pip3 install impacket")
-		print(f"{self.bcolors.INSTALL}{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Installing CME{self.bcolors.ENDC}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Installing CME{bcolors.ENDC}")
 		os.system("apt install crackmapexec")
-		print(f"{self.bcolors.INSTALL}{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Installing Certipy{self.bcolors.ENDC}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Installing Certipy{bcolors.ENDC}")
 		os.system("apt install certipy-ad")
-		print(f"{self.bcolors.INSTALL}{self.bcolors.INSTALL}[+]{self.bcolors.ENDC} Installing NMAP{self.bcolors.ENDC}")
+		print(f"{bcolors.INSTALL}[+]{bcolors.ENDC} Installing NMAP{bcolors.ENDC}")
 		os.system("apt install nmap")
 		sys.exit(0)
 	
@@ -136,7 +135,7 @@ class AD_Hunt:
 			sys.exit(1)
 
 		if(sys.version_info[0] != 3):
-			print("{0}Warning: This script has only been tested for python3{1}".format(self.bcolors.WARNING, self.bcolors.ENDC))
+			print("{0}Warning: This script has only been tested for python3{1}".format(bcolors.WARNING, bcolors.ENDC))
 			sys.exit(1)
 
 		self.setup()
@@ -170,13 +169,17 @@ class AD_Hunt:
 		if(args.install):
 			self.install()
 
+		# this has to be installed so it needs to only be imported after we have had a chance to install everything
+		import ldap3
+
+
 		if(not args.domain_controller_ip):
 			print("Must specify the ip of a domain controller with -dc-ip") # TODO eventually not required for aggressive scanning
 			sys.exit(1)
 
 		if(not args.domain):
-			s = Server(args.domain_controller_ip, get_info = ALL)
-			c = Connection(s)
+			s = ldap3.Server(args.domain_controller_ip, get_info = ldap3.ALL)
+			c = ldap3.Connection(s)
 			if(not c.bind()):
 				print(c.result)
 				print("Could not get domain automatically")
@@ -208,17 +211,17 @@ class AD_Hunt:
 
 		
 		if(args.ssl):
-			self.s = Server(args.domain_controller_ip, get_info=ALL, use_ssl=True)
+			self.s = ldap3.Server(args.domain_controller_ip, get_info=ldap3.ALL, use_ssl=True)
 		else:
-			self.s = Server(args.domain_controller_ip, get_info=ALL)
+			self.s = ldap3.Server(args.domain_controller_ip, get_info=ldap3.ALL)
 
 		if(args.hash):
-			self.c = Connection(self.s, f"{args.domain}\\{args.username}", args.hash, authentication="NTLM")
+			self.c = ldap3.Connection(self.s, f"{args.domain}\\{args.username}", args.hash, authentication="NTLM")
 			args.password = args.hash
 		elif(args.password != ''):
-			self.c = Connection(self.s, f"{args.domain}\\{args.username}", args.password, authentication="NTLM")
+			self.c = ldap3.Connection(self.s, f"{args.domain}\\{args.username}", args.password, authentication="NTLM")
 		else:
-			self.c = Connection(self.s)
+			self.c = ldap3.Connection(self.s)
 			
 		if(not self.c.bind()):
 			print(self.c.result)
