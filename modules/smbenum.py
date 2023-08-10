@@ -5,6 +5,8 @@ from modules.common import *
 import os
 
 class SMBEnumeration:
+    dependencies = ["systems"]
+
     """
     Handles checking for smb misconfigurations and does enumeration by share spidering
 

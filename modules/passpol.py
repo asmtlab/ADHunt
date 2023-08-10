@@ -3,6 +3,8 @@ from ldap3 import *
 from modules.clogging import Logging
 
 class PasswordPolicies:
+    dependencies = []
+
     def __init__(self, c: Connection, s: Server):
         self.s = s
         self.c = c

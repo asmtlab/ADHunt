@@ -5,6 +5,8 @@ import os
 from modules.common import *
 
 class SystemVulnCheck:
+    dependencies = ["systems"]
+
     """
     This checks a list of ips for vulnerabilities. Namely: smb_signing, webdav, and printspooler. In the
     case where the ip appears in the domain controller list it also checks for ldap_signing, petitpotam, eternalblue, 

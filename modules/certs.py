@@ -5,6 +5,8 @@ import os
 from modules.common import *
 
 class CertificateEnumeration:
+    dependencies = ["ad-dns"]
+
     """
     This simply just uses certipy to find all vulnerable certicates within a domain.
 

@@ -5,7 +5,7 @@ from modules.clogging import Logging
 import dns.resolver
 
 class NSEnumeration:
-    dependencies = ["ADDNSEnumeration"]
+    dependencies = ["ad-dns"]
     
     def __init__(self, c: Connection, s: Server, NS_records: list, A_records: list, domain: str, scopeEnabled: bool, scopeExclude: list, scopeInclude: list):
         self.c = c

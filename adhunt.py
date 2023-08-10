@@ -23,6 +23,19 @@ class RawFormatter(argparse.HelpFormatter):
         return "\n".join([textwrap.fill(line, width) for line in textwrap.indent(textwrap.dedent(text), indent).splitlines()])
 
 class AD_Hunt:
+	modules = {
+		"pass-pols": PasswordPolicies,
+		"delegations": DelegationEnumeration,
+		"users": UserEnumeration,
+		"certificates": CertificateEnumeration,
+		"ad-dns": ADDNSEnumeration,
+		"nameservers": NSEnumeration,
+		"domain-controllers": DCEnumeration,
+		"systems": SystemEnumeration,
+		"system-vulns": SystemVulnCheck,
+		"smb": SMBEnumeration,
+	}
+
 	"""
 	This runs system commands to install the dependancies needed for this program
 	"""
@@ -125,7 +138,7 @@ class AD_Hunt:
 
 		parser.add_argument("--fresh", help="Should modules load from the save dir or regenerate all data", action='store_true')
 
-		self.tests = ["pass-pols", "delegations", "users", "certificates", "ad-dns", "nameservers", "domain-controllers", "systems", "system-vulns", "smb"]
+		self.tests = self.modules.keys()
 		parser.add_argument("--just", choices=self.tests, help="only run the specified check(s) and its required other checks", nargs="+")
 
 		self.args = parser.parse_args()

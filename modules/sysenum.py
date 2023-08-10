@@ -4,6 +4,8 @@ from modules.common import *
 from modules.clogging import Logging
 
 class SystemEnumeration:
+    dependencies = ["ad-dns"]
+
     """
     This searches for IPs with multiple methods. It first searches through a list of A records to find ips 
     then it queries the ldap server looking for services.  Once it finds those services it trys to resolve 
