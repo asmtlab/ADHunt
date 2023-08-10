@@ -4,6 +4,9 @@ AD Hunt is a tool for enumerating Active Directory Enviroments looking for inter
 
 It currently enumerates the enviroment looking for DNS information, AD information, and SMB information
 
+## Further Documentation
+If you are a CISA Employee please consult the internal documentation.
+
 ## Use Cases
 
 This tool is designed for when you have a known domain controller and user for that dc and need to quickly gather useful information.  It only works from a linux system.
